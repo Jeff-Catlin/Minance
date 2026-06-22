@@ -1,6 +1,7 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, Fragment } from 'react'
 import { supabase } from '../lib/supabase'
-import type { Category, Transaction } from '../types'
+import type { Category, Transaction, TransactionSplit } from '../types'
+import SplitModal from './SplitModal'
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
@@ -118,8 +119,11 @@ interface TransactionRow extends Transaction {
 export default function TransactionList() {
   const [transactions, setTransactions] = useState<TransactionRow[]>([])
   const [categories, setCategories] = useState<Category[]>([])
+  const [splitsMap, setSplitsMap] = useState<Map<string, TransactionSplit[]>>(new Map())
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
+  const [expandedSplit, setExpandedSplit] = useState<string | null>(null)
+  const [splitModal, setSplitModal] = useState<{ tx: Transaction; splits: TransactionSplit[] } | null>(null)
 
   // Filters
   const [search, setSearch] = useState('')
@@ -129,7 +133,7 @@ export default function TransactionList() {
   const [filterTo, setFilterTo] = useState('')
 
   async function load() {
-    const [{ data: txns }, { data: cats }] = await Promise.all([
+    const [{ data: txns }, { data: cats }, { data: splits }] = await Promise.all([
       supabase
         .from('transactions')
         .select('*')
@@ -140,6 +144,7 @@ export default function TransactionList() {
         .select('*')
         .eq('is_archived', false)
         .order('name'),
+      supabase.from('transaction_splits').select('*'),
     ])
 
     const catMap = new Map((cats ?? []).map(c => [c.id, c.name]))
@@ -150,6 +155,13 @@ export default function TransactionList() {
       }))
     )
     setCategories(cats ?? [])
+
+    const map = new Map<string, TransactionSplit[]>()
+    for (const sp of splits ?? []) {
+      if (!map.has(sp.transaction_id)) map.set(sp.transaction_id, [])
+      map.get(sp.transaction_id)!.push(sp)
+    }
+    setSplitsMap(map)
     setLoading(false)
   }
 
@@ -297,51 +309,132 @@ export default function TransactionList() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map(t => (
-                  <tr key={t.id}>
-                    <td style={{ ...s.td, whiteSpace: 'nowrap', color: 'var(--color-text-muted)', fontSize: '13px' }}>
-                      {formatDate(t.date)}
-                    </td>
-                    <td style={{ ...s.td, fontWeight: 500 }}>{t.vendor}</td>
-                    <td style={{ ...s.td, color: 'var(--color-text-muted)', fontSize: '13px' }}>
-                      {t.description ?? '—'}
-                    </td>
-                    <td style={{
-                      ...s.td,
-                      textAlign: 'right',
-                      fontVariantNumeric: 'tabular-nums',
-                      whiteSpace: 'nowrap',
-                      fontWeight: 500,
-                      color: t.type === 'income' ? 'var(--color-income)' : 'var(--color-expense)',
-                    }}>
-                      {t.type === 'income' ? '+' : '−'}${formatAmount(t.amount)}
-                    </td>
-                    <td style={s.td}>
-                      <select
-                        style={{
-                          ...s.select,
-                          opacity: saving === t.id ? 0.5 : 1,
-                          color: t.category_id ? 'var(--color-text)' : 'var(--color-text-muted)',
-                        }}
-                        value={t.category_id ?? ''}
-                        disabled={saving === t.id}
-                        onChange={e => handleCategoryChange(t.id, e.target.value)}
-                      >
-                        <option value="">Uncategorized</option>
-                        {categoryOptions.map(opt => (
-                          <option key={opt.id} value={opt.id}>
-                            {opt.indent ? `  ${opt.label}` : opt.label}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                  </tr>
-                ))}
+                {filtered.map(t => {
+                  const txSplits = splitsMap.get(t.id) ?? []
+                  const catMap = new Map(categories.map(c => [c.id, c.name]))
+                  const isExpanded = expandedSplit === t.id
+                  return (
+                    <Fragment key={t.id}>
+                      <tr>
+                        <td style={{ ...s.td, whiteSpace: 'nowrap', color: 'var(--color-text-muted)', fontSize: '13px' }}>
+                          {formatDate(t.date)}
+                        </td>
+                        <td style={{ ...s.td, fontWeight: 500 }}>{t.vendor}</td>
+                        <td style={{ ...s.td, color: 'var(--color-text-muted)', fontSize: '13px' }}>
+                          {t.description ?? '—'}
+                        </td>
+                        <td style={{
+                          ...s.td,
+                          textAlign: 'right',
+                          fontVariantNumeric: 'tabular-nums',
+                          whiteSpace: 'nowrap',
+                          fontWeight: 500,
+                          color: t.type === 'income' ? 'var(--color-income)' : 'var(--color-expense)',
+                        }}>
+                          {t.type === 'income' ? '+' : '−'}${formatAmount(t.amount)}
+                        </td>
+                        <td style={s.td}>
+                          {t.is_split ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <button
+                                onClick={() => setExpandedSplit(isExpanded ? null : t.id)}
+                                style={{
+                                  fontFamily: 'inherit',
+                                  fontSize: '12px',
+                                  padding: '3px 8px',
+                                  borderRadius: '20px',
+                                  border: '1px solid var(--color-primary-text)',
+                                  background: 'rgba(14,159,142,0.08)',
+                                  color: 'var(--color-primary-text)',
+                                  cursor: 'pointer',
+                                  fontWeight: 500,
+                                }}
+                              >
+                                Split {isExpanded ? '▲' : '▼'}
+                              </button>
+                              <button
+                                style={{ ...s.select, maxWidth: '50px', padding: '3px 8px', fontSize: '12px', color: 'var(--color-text-muted)' }}
+                                onClick={() => setSplitModal({ tx: t, splits: txSplits })}
+                              >
+                                Edit
+                              </button>
+                            </div>
+                          ) : (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <select
+                                style={{
+                                  ...s.select,
+                                  opacity: saving === t.id ? 0.5 : 1,
+                                  color: t.category_id ? 'var(--color-text)' : 'var(--color-text-muted)',
+                                }}
+                                value={t.category_id ?? ''}
+                                disabled={saving === t.id}
+                                onChange={e => handleCategoryChange(t.id, e.target.value)}
+                              >
+                                <option value="">Uncategorized</option>
+                                {categoryOptions.map(opt => (
+                                  <option key={opt.id} value={opt.id}>
+                                    {opt.indent ? `  ${opt.label}` : opt.label}
+                                  </option>
+                                ))}
+                              </select>
+                              <button
+                                style={{
+                                  fontFamily: 'inherit',
+                                  fontSize: '12px',
+                                  padding: '3px 8px',
+                                  borderRadius: '6px',
+                                  border: '1px solid var(--color-border)',
+                                  background: 'transparent',
+                                  color: 'var(--color-primary-text)',
+                                  cursor: 'pointer',
+                                }}
+                                onClick={() => setSplitModal({ tx: t, splits: [] })}
+                              >
+                                Split
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                      {t.is_split && isExpanded && (
+                        <tr>
+                          <td colSpan={5} style={{ padding: '0 14px 12px 28px', background: 'var(--color-bg)' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                              <tbody>
+                                {txSplits.map(sp => (
+                                  <tr key={sp.id}>
+                                    <td style={{ padding: '4px 8px', color: 'var(--color-text-muted)' }}>
+                                      {catMap.get(sp.category_id) ?? 'Unknown category'}
+                                    </td>
+                                    <td style={{ padding: '4px 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--color-expense)', fontWeight: 500 }}>
+                                      ${formatAmount(sp.amount)}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  )
+                })}
               </tbody>
             </table>
           </div>
         )}
       </div>
+
+      {splitModal && (
+        <SplitModal
+          transaction={splitModal.tx}
+          existingSplits={splitModal.splits}
+          categories={categories}
+          onSave={() => { setSplitModal(null); load() }}
+          onClose={() => setSplitModal(null)}
+        />
+      )}
     </div>
   )
 }

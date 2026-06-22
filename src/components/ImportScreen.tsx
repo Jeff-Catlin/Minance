@@ -151,6 +151,7 @@ export default function ImportScreen() {
       amount: 0,
       type: 'expense' as const,
       description: null,
+      is_split: false,
     }))
 
     const categorized = categorizeRows(result.rows, categories, transactions)

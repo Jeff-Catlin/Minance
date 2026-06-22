@@ -25,5 +25,15 @@ export interface Transaction {
   description: string | null
   vendor: string
   category_id: string | null
+  is_split: boolean
+  created_at: string
+}
+
+export interface TransactionSplit {
+  id: string
+  transaction_id: string
+  amount: number
+  category_id: string
+  note: string | null
   created_at: string
 }

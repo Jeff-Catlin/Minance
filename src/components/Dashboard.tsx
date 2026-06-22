@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
-import type { Category, Transaction } from '../types'
+import type { Category, Transaction, TransactionSplit } from '../types'
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
@@ -185,6 +185,7 @@ const s = {
 
 export default function Dashboard() {
   const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [splits, setSplits] = useState<TransactionSplit[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -207,12 +208,17 @@ export default function Dashboard() {
       if (range.from) query = query.gte('date', range.from)
       if (range.to)   query = query.lte('date', range.to)
 
-      const [{ data: txns }, { data: cats }] = await Promise.all([
-        query,
+      const txns_result = await query
+      const txnIds = (txns_result.data ?? []).filter(t => t.is_split).map(t => t.id)
+      const [{ data: cats }, { data: splitData }] = await Promise.all([
         supabase.from('categories').select('*'),
+        txnIds.length > 0
+          ? supabase.from('transaction_splits').select('*').in('transaction_id', txnIds)
+          : Promise.resolve({ data: [] }),
       ])
 
-      setTransactions(txns ?? [])
+      setTransactions(txns_result.data ?? [])
+      setSplits(splitData ?? [])
       setCategories(cats ?? [])
       setLoading(false)
     }
@@ -226,16 +232,29 @@ export default function Dashboard() {
     const parents = categories.filter(c => c.parent_id === null)
     const childrenOf = (id: string) => categories.filter(c => c.parent_id === id)
 
-    // Sum transactions by category_id
-    const sumByCategory = new Map<string, number>()
-    for (const t of transactions) {
-      if (!t.category_id) continue
-      sumByCategory.set(t.category_id, (sumByCategory.get(t.category_id) ?? 0) + t.amount)
+    // Build splits lookup
+    const splitsById = new Map<string, TransactionSplit[]>()
+    for (const sp of splits) {
+      if (!splitsById.has(sp.transaction_id)) splitsById.set(sp.transaction_id, [])
+      splitsById.get(sp.transaction_id)!.push(sp)
     }
 
-    // Uncategorized totals
-    const uncatExpense = transactions.filter(t => !t.category_id && t.type === 'expense').reduce((s, t) => s + t.amount, 0)
-    const uncatIncome  = transactions.filter(t => !t.category_id && t.type === 'income').reduce((s, t) => s + t.amount, 0)
+    // Sum transactions by category_id, using split amounts for split transactions
+    const sumByCategory = new Map<string, number>()
+    for (const t of transactions) {
+      if (t.is_split) {
+        for (const sp of splitsById.get(t.id) ?? []) {
+          sumByCategory.set(sp.category_id, (sumByCategory.get(sp.category_id) ?? 0) + sp.amount)
+        }
+      } else {
+        if (!t.category_id) continue
+        sumByCategory.set(t.category_id, (sumByCategory.get(t.category_id) ?? 0) + t.amount)
+      }
+    }
+
+    // Uncategorized totals (exclude split transactions — they're always fully categorized)
+    const uncatExpense = transactions.filter(t => !t.category_id && !t.is_split && t.type === 'expense').reduce((s, t) => s + t.amount, 0)
+    const uncatIncome  = transactions.filter(t => !t.category_id && !t.is_split && t.type === 'income').reduce((s, t) => s + t.amount, 0)
 
     function buildRows(type: 'expense' | 'income') {
       const typeTxns = transactions.filter(t => t.type === type)
@@ -283,7 +302,7 @@ export default function Dashboard() {
     const totalIncome   = incomeRows.reduce((s, r) => s + r.parentTotal, 0) + uncatIncome
 
     return { expenseRows, incomeRows, totalExpenses, totalIncome, uncatExpense, uncatIncome, catMap }
-  }, [transactions, categories])
+  }, [transactions, splits, categories])
 
   function toggleExpanded(id: string) {
     setExpanded(prev => {

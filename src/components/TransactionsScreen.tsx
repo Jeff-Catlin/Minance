@@ -1,16 +1,24 @@
 import { useState } from 'react'
 import TransactionList from './TransactionList'
 import RecurringTransactions from './RecurringTransactions'
+import UncategorizedTab from './UncategorizedTab'
 
-type SubTab = 'all' | 'recurring'
-
-const SUB_TABS: { key: SubTab; label: string }[] = [
-  { key: 'all', label: 'All Transactions' },
-  { key: 'recurring', label: 'Recurring' },
-]
+type SubTab = 'all' | 'uncategorized' | 'recurring'
 
 export default function TransactionsScreen() {
   const [subTab, setSubTab] = useState<SubTab>('all')
+  const [uncategorizedCount, setUncategorizedCount] = useState<number | null>(null)
+
+  const SUB_TABS: { key: SubTab; label: () => string }[] = [
+    { key: 'all', label: () => 'All Transactions' },
+    {
+      key: 'uncategorized',
+      label: () => uncategorizedCount !== null && uncategorizedCount > 0
+        ? `Uncategorized (${uncategorizedCount})`
+        : 'Uncategorized',
+    },
+    { key: 'recurring', label: () => 'Recurring' },
+  ]
 
   return (
     <div>
@@ -22,6 +30,7 @@ export default function TransactionsScreen() {
       }}>
         {SUB_TABS.map(tab => {
           const active = subTab === tab.key
+          const isAlert = tab.key === 'uncategorized' && uncategorizedCount !== null && uncategorizedCount > 0
           return (
             <button
               key={tab.key}
@@ -34,19 +43,26 @@ export default function TransactionsScreen() {
                 background: 'transparent',
                 border: 'none',
                 borderBottom: active ? '2px solid var(--color-primary)' : '2px solid transparent',
-                color: active ? 'var(--color-primary-text)' : 'var(--color-text-muted)',
+                color: active
+                  ? 'var(--color-primary-text)'
+                  : isAlert
+                    ? 'var(--color-expense)'
+                    : 'var(--color-text-muted)',
                 cursor: 'pointer',
                 marginBottom: '-1px',
                 transition: 'color 0.15s',
               }}
             >
-              {tab.label}
+              {tab.label()}
             </button>
           )
         })}
       </nav>
 
       {subTab === 'all' && <TransactionList />}
+      {subTab === 'uncategorized' && (
+        <UncategorizedTab onCountChange={setUncategorizedCount} />
+      )}
       {subTab === 'recurring' && <RecurringTransactions />}
     </div>
   )
