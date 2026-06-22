@@ -14,6 +14,8 @@ interface RecurringEntry {
   vendor: string
   category_id: string | null
   cadence: Cadence
+  expected_day: number | null
+  expected_month: number | null
   created_at: string
 }
 
@@ -60,6 +62,37 @@ const CADENCE_COLORS: Record<Cadence, string> = {
   quarterly: '#8B5CF6',
   biannually: '#F59E0B',
   annually: '#EF4444',
+}
+
+// ── Date helpers ──────────────────────────────────────────────────────────────
+
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December']
+
+function ordinal(n: number): string {
+  const s = ['th', 'st', 'nd', 'rd']
+  const v = n % 100
+  return n + (s[(v - 20) % 10] || s[v] || s[0])
+}
+
+function formatExpectedDate(cadence: Cadence, day: number | null, month: number | null): string | null {
+  if (!day) return null
+  if (cadence === 'monthly') return `Expected around the ${ordinal(day)}`
+  if (month) return `Expected around ${MONTH_NAMES[month - 1]} ${ordinal(day)}`
+  return `Expected around the ${ordinal(day)}`
+}
+
+function detectExpectedDate(
+  txns: Transaction[],
+  cadence: Cadence,
+): { expected_day: number | null; expected_month: number | null } {
+  if (txns.length === 0) return { expected_day: null, expected_month: null }
+  const sorted = [...txns].sort((a, b) => a.date.localeCompare(b.date))
+  const days = sorted.map(t => new Date(t.date).getDate())
+  const expected_day = Math.round(days.reduce((a, b) => a + b, 0) / days.length)
+  if (cadence === 'monthly') return { expected_day, expected_month: null }
+  const recentMonth = new Date(sorted[sorted.length - 1].date).getMonth() + 1
+  return { expected_day, expected_month: recentMonth }
 }
 
 // ── Pattern detection ─────────────────────────────────────────────────────────
@@ -399,7 +432,7 @@ const s = {
 interface AddModalProps {
   categoryOptions: { id: string; label: string; indent: boolean }[]
   uniqueVendors: string[]
-  onSave: (vendor: string, category_id: string | null, cadence: Cadence) => Promise<string | null>
+  onSave: (vendor: string, category_id: string | null, cadence: Cadence, expected_day: number | null, expected_month: number | null) => Promise<string | null>
   onClose: () => void
 }
 
@@ -407,13 +440,17 @@ function AddRecurringModal({ categoryOptions, uniqueVendors, onSave, onClose }: 
   const [vendor, setVendor] = useState('')
   const [categoryId, setCategoryId] = useState('')
   const [cadence, setCadence] = useState<Cadence>('monthly')
+  const [expectedDay, setExpectedDay] = useState('')
+  const [expectedMonth, setExpectedMonth] = useState('')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
   async function handleSave() {
     if (!vendor.trim()) { setError('Please enter a vendor name.'); return }
+    const day = expectedDay ? parseInt(expectedDay) : null
+    const month = expectedMonth ? parseInt(expectedMonth) : null
     setSaving(true)
-    const err = await onSave(vendor.trim(), categoryId === '' ? null : categoryId, cadence)
+    const err = await onSave(vendor.trim(), categoryId === '' ? null : categoryId, cadence, day, month)
     setSaving(false)
     if (err) setError(err)
     else onClose()
@@ -452,12 +489,35 @@ function AddRecurringModal({ categoryOptions, uniqueVendors, onSave, onClose }: 
         </select>
 
         <label style={s.modalLabel}>Cadence</label>
-        <select style={s.select} value={cadence} onChange={e => setCadence(e.target.value as Cadence)}>
+        <select style={s.select} value={cadence} onChange={e => { setCadence(e.target.value as Cadence); setExpectedMonth('') }}>
           <option value="monthly">Monthly</option>
           <option value="quarterly">Quarterly</option>
           <option value="biannually">Biannually</option>
           <option value="annually">Annually</option>
         </select>
+
+        <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
+          <div style={{ flex: 1 }}>
+            <label style={{ ...s.modalLabel, marginTop: 0 }}>Expected day</label>
+            <select style={s.select} value={expectedDay} onChange={e => setExpectedDay(e.target.value)}>
+              <option value="">Not set</option>
+              {Array.from({ length: 31 }, (_, i) => i + 1).map(d => (
+                <option key={d} value={d}>{ordinal(d)}</option>
+              ))}
+            </select>
+          </div>
+          {cadence !== 'monthly' && (
+            <div style={{ flex: 1 }}>
+              <label style={{ ...s.modalLabel, marginTop: 0 }}>Expected month</label>
+              <select style={s.select} value={expectedMonth} onChange={e => setExpectedMonth(e.target.value)}>
+                <option value="">Not set</option>
+                {MONTH_NAMES.map((m, i) => (
+                  <option key={i + 1} value={i + 1}>{m}</option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
 
         {error && (
           <div style={{ marginTop: '12px', fontSize: '13px', padding: '8px 12px', borderRadius: '8px', background: 'rgba(224,107,107,0.1)', color: 'var(--color-expense)', border: '1px solid var(--color-expense)' }}>
@@ -547,10 +607,14 @@ export default function RecurringTransactions() {
   // ── Actions ──────────────────────────────────────────────────────────────────
 
   async function handleConfirm(sg: Suggestion) {
+    const matches = transactions.filter(t => t.vendor === sg.vendor && t.category_id === sg.category_id)
+    const { expected_day, expected_month } = detectExpectedDate(matches, sg.cadence)
     await supabase.from('recurring_transactions').insert({
       vendor: sg.vendor,
       category_id: sg.category_id,
       cadence: sg.cadence,
+      expected_day,
+      expected_month,
     })
     load()
   }
@@ -685,6 +749,11 @@ export default function RecurringTransactions() {
                   </div>
                   <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '3px' }}>
                     {cat?.name ?? 'Uncategorized'}
+                    {formatExpectedDate(entry.cadence, entry.expected_day, entry.expected_month) && (
+                      <span style={{ marginLeft: '8px', color: 'var(--color-primary-text)' }}>
+                        · {formatExpectedDate(entry.cadence, entry.expected_day, entry.expected_month)}
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
@@ -738,8 +807,8 @@ export default function RecurringTransactions() {
         <AddRecurringModal
           categoryOptions={categoryOptions}
           uniqueVendors={uniqueVendors}
-          onSave={async (vendor, category_id, cadence) => {
-            const { error } = await supabase.from('recurring_transactions').insert({ vendor, category_id, cadence })
+          onSave={async (vendor, category_id, cadence, expected_day, expected_month) => {
+            const { error } = await supabase.from('recurring_transactions').insert({ vendor, category_id, cadence, expected_day, expected_month })
             if (error) return error.message
             load()
             return null
