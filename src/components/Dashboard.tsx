@@ -201,6 +201,17 @@ export default function Dashboard() {
     return getPresetRange(preset)
   }, [preset, customFrom, customTo])
 
+  const budgetMultiplier = useMemo(() => {
+    if (preset === 'week') return null
+    if (preset === 'month') return 1
+    if (preset === 'year') return 12
+    if (preset === 'custom' && range.from && range.to) {
+      const days = (new Date(range.to).getTime() - new Date(range.from).getTime()) / 86400000 + 1
+      return days / 30.44
+    }
+    return null
+  }, [preset, range])
+
   useEffect(() => {
     async function load() {
       setLoading(true)
@@ -227,8 +238,9 @@ export default function Dashboard() {
 
   // ── Rollup logic ────────────────────────────────────────────────────────────
 
+  const catMap = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories])
+
   const { expenseRows, incomeRows, totalExpenses, totalIncome } = useMemo(() => {
-    const catMap = new Map(categories.map(c => [c.id, c]))
     const parents = categories.filter(c => c.parent_id === null)
     const childrenOf = (id: string) => categories.filter(c => c.parent_id === id)
 
@@ -314,10 +326,37 @@ export default function Dashboard() {
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
+  function renderBudgetBar(spent: number, budget: number | null, isIncome: boolean) {
+    const hasBudget = budget !== null && budget > 0
+    const pct = hasBudget ? Math.min((spent / budget!) * 100, 100) : 0
+    const over = hasBudget && (isIncome ? spent < budget! : spent > budget!)
+    const fill = hasBudget ? (over ? 'var(--color-expense)' : 'var(--color-income)') : 'var(--color-border)'
+    const diff = hasBudget ? Math.abs(budget! - spent) : null
+
+    return (
+      <div style={{ marginTop: '4px' }}>
+        <div style={{ height: '3px', background: 'var(--color-border)', borderRadius: '2px', overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: `${pct}%`, background: fill, borderRadius: '2px', transition: 'width 0.3s' }} />
+        </div>
+        {hasBudget && diff !== null && (
+          <span style={{ fontSize: '10px', color: over ? 'var(--color-expense)' : 'var(--color-income)', fontWeight: 500 }}>
+            {isIncome
+              ? over ? `$${formatAmount(diff)} below target` : `$${formatAmount(diff)} above target`
+              : over ? `$${formatAmount(diff)} over` : `$${formatAmount(diff)} left`}
+          </span>
+        )}
+        {!hasBudget && (
+          <span style={{ fontSize: '10px', color: 'var(--color-text-muted)' }}>No budget set</span>
+        )}
+      </div>
+    )
+  }
+
   function renderTable(
     rows: { parentId: string; parentName: string; parentTotal: number; children: { id: string; name: string; total: number }[] }[],
     total: number,
     color: string,
+    isIncome: boolean,
   ) {
     if (rows.length === 0) return (
       <p style={{ color: 'var(--color-text-muted)', fontSize: '14px', margin: 0 }}>
@@ -334,35 +373,68 @@ export default function Dashboard() {
           </tr>
         </thead>
         <tbody>
-          {rows.map(row => (
-            <>
-              <tr
-                key={row.parentId}
-                style={s.parentRow}
-                onClick={() => row.children.length > 0 && toggleExpanded(row.parentId)}
-              >
-                <td style={s.parentTd()}>
-                  {row.children.length > 0 && (
-                    <span style={{ marginRight: '6px', fontSize: '11px', color: 'var(--color-text-muted)' }}>
-                      {expanded.has(row.parentId) ? '▼' : '▶'}
-                    </span>
-                  )}
-                  {row.parentName}
-                </td>
-                <td style={{ ...s.parentTd(color), textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                  ${formatAmount(row.parentTotal)}
-                </td>
-              </tr>
-              {expanded.has(row.parentId) && row.children.map(child => (
-                <tr key={child.id}>
-                  <td style={s.childTd()}>{child.name}</td>
-                  <td style={{ ...s.childTd(color), textAlign: 'right', fontVariantNumeric: 'tabular-nums', opacity: 0.8 }}>
-                    ${formatAmount(child.total)}
+          {rows.map(row => {
+            const parentCat = catMap.get(row.parentId)
+            const allChildren = categories.filter(c => c.parent_id === row.parentId)
+            const scaledParentBudget = (() => {
+              if (!budgetMultiplier) return null
+              if (allChildren.length === 0) {
+                return parentCat?.monthly_budget != null ? parentCat.monthly_budget * budgetMultiplier : null
+              }
+              const hasSubBudget = allChildren.some(c => c.monthly_budget != null)
+              if (!hasSubBudget) return null
+              return allChildren.reduce((s, c) => s + (c.monthly_budget ?? 0), 0) * budgetMultiplier
+            })()
+
+            return (
+              <>
+                <tr
+                  key={row.parentId}
+                  style={s.parentRow}
+                  onClick={() => row.children.length > 0 && toggleExpanded(row.parentId)}
+                >
+                  <td style={s.parentTd()}>
+                    {row.children.length > 0 && (
+                      <span style={{ marginRight: '6px', fontSize: '11px', color: 'var(--color-text-muted)' }}>
+                        {expanded.has(row.parentId) ? '▼' : '▶'}
+                      </span>
+                    )}
+                    {row.parentName}
+                    {renderBudgetBar(row.parentTotal, scaledParentBudget, isIncome)}
+                  </td>
+                  <td style={{ ...s.parentTd(color), textAlign: 'right', fontVariantNumeric: 'tabular-nums', verticalAlign: 'top' }}>
+                    ${formatAmount(row.parentTotal)}
+                    {scaledParentBudget !== null && (
+                      <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', fontWeight: 400 }}>
+                        of ${formatAmount(scaledParentBudget)}
+                      </div>
+                    )}
                   </td>
                 </tr>
-              ))}
-            </>
-          ))}
+                {expanded.has(row.parentId) && row.children.map(child => {
+                  const childCat = catMap.get(child.id)
+                  const scaledChildBudget = budgetMultiplier && childCat?.monthly_budget != null
+                    ? childCat.monthly_budget * budgetMultiplier : null
+                  return (
+                    <tr key={child.id}>
+                      <td style={s.childTd()}>
+                        {child.name}
+                        {renderBudgetBar(child.total, scaledChildBudget, isIncome)}
+                      </td>
+                      <td style={{ ...s.childTd(color), textAlign: 'right', fontVariantNumeric: 'tabular-nums', opacity: 0.8, verticalAlign: 'top' }}>
+                        ${formatAmount(child.total)}
+                        {scaledChildBudget !== null && (
+                          <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', fontWeight: 400, opacity: 1 }}>
+                            of ${formatAmount(scaledChildBudget)}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </>
+            )
+          })}
         </tbody>
         <tfoot>
           <tr style={s.totalRow}>
@@ -446,13 +518,13 @@ export default function Dashboard() {
           {/* Expenses breakdown */}
           <div style={s.card}>
             <p style={s.sectionTitle}>Where your money went</p>
-            {renderTable(expenseRows, totalExpenses, 'var(--color-expense)')}
+            {renderTable(expenseRows, totalExpenses, 'var(--color-expense)', false)}
           </div>
 
           {/* Income breakdown */}
           <div style={s.card}>
             <p style={s.sectionTitle}>Money in</p>
-            {renderTable(incomeRows, totalIncome, 'var(--color-income)')}
+            {renderTable(incomeRows, totalIncome, 'var(--color-income)', true)}
           </div>
         </>
       )}

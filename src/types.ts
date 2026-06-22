@@ -3,6 +3,7 @@ export interface Category {
   name: string
   parent_id: string | null
   is_archived: boolean
+  monthly_budget: number | null
   created_at: string
 }
 
