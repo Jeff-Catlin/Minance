@@ -408,7 +408,7 @@ export default function CategoryManager() {
     const to = `${y}-${String(m + 1).padStart(2, '0')}-${String(new Date(y, m + 1, 0).getDate()).padStart(2, '0')}`
 
     const [{ data: cats }, { data: txns }] = await Promise.all([
-      supabase.from('categories').select('*').eq('is_archived', false).order('created_at', { ascending: true }),
+      supabase.from('categories').select('*').eq('is_archived', false).order('name', { ascending: true }),
       supabase.from('transactions').select('*').gte('date', from).lte('date', to),
     ])
 
