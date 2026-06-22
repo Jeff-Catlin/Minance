@@ -7,6 +7,7 @@ import type { Category, Transaction } from '../types'
 type Cadence = 'monthly' | 'quarterly' | 'biannually' | 'annually'
 type GraphMode = 'historical' | 'forecast'
 type GraphFilter = 'all' | 'monthly'
+type GraphRange = 1 | 3 | 6 | 12
 
 interface RecurringEntry {
   id: string
@@ -124,13 +125,14 @@ function buildHistoricalData(
   transactions: Transaction[],
   recurring: RecurringEntry[],
   filter: GraphFilter,
+  range: GraphRange,
 ): { label: string; amount: number }[] {
   const now = new Date()
   const filtered = filter === 'monthly' ? recurring.filter(r => r.cadence === 'monthly') : recurring
   const keys = new Set(filtered.map(r => `${r.vendor}|||${r.category_id ?? ''}`))
   const data: { label: string; amount: number }[] = []
 
-  for (let i = 11; i >= 0; i--) {
+  for (let i = range - 1; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
     const y = d.getFullYear()
     const m = d.getMonth()
@@ -150,12 +152,13 @@ function buildForecastData(
   transactions: Transaction[],
   recurring: RecurringEntry[],
   filter: GraphFilter,
+  range: GraphRange,
 ): { label: string; amount: number }[] {
   const now = new Date()
   const filtered = filter === 'monthly' ? recurring.filter(r => r.cadence === 'monthly') : recurring
   const data: { label: string; amount: number }[] = []
 
-  for (let i = 0; i < 12; i++) {
+  for (let i = 0; i < range; i++) {
     const d = new Date(now.getFullYear(), now.getMonth() + i, 1)
     const year = d.getFullYear()
     const month = d.getMonth()
@@ -484,6 +487,7 @@ export default function RecurringTransactions() {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [graphMode, setGraphMode] = useState<GraphMode>('historical')
   const [graphFilter, setGraphFilter] = useState<GraphFilter>('all')
+  const [graphRange, setGraphRange] = useState<GraphRange>(1)
   const [showAddModal, setShowAddModal] = useState(false)
 
   async function load() {
@@ -511,9 +515,9 @@ export default function RecurringTransactions() {
   )
 
   const graphData = useMemo(() => {
-    if (graphMode === 'historical') return buildHistoricalData(transactions, recurring, graphFilter)
-    return buildForecastData(transactions, recurring, graphFilter)
-  }, [graphMode, graphFilter, transactions, recurring])
+    if (graphMode === 'historical') return buildHistoricalData(transactions, recurring, graphFilter, graphRange)
+    return buildForecastData(transactions, recurring, graphFilter, graphRange)
+  }, [graphMode, graphFilter, graphRange, transactions, recurring])
 
   const monthlyAvg = useMemo(() => {
     const nonZero = graphData.filter(d => d.amount > 0)
@@ -626,12 +630,18 @@ export default function RecurringTransactions() {
               <strong style={{ color: 'var(--color-text)' }}>${formatAmount(monthlyAvg)}</strong>
             </p>
           </div>
-          <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', flexShrink: 0 }}>
+          <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', flexShrink: 0, alignItems: 'center' }}>
             <button style={s.toggleBtn(graphMode === 'historical')} onClick={() => setGraphMode('historical')}>Historical</button>
             <button style={s.toggleBtn(graphMode === 'forecast')} onClick={() => setGraphMode('forecast')}>Forecast</button>
             <div style={{ width: '1px', background: 'var(--color-border)', margin: '0 4px' }} />
             <button style={s.toggleBtn(graphFilter === 'all')} onClick={() => setGraphFilter('all')}>All</button>
             <button style={s.toggleBtn(graphFilter === 'monthly')} onClick={() => setGraphFilter('monthly')}>Monthly only</button>
+            <div style={{ width: '1px', background: 'var(--color-border)', margin: '0 4px' }} />
+            {([1, 3, 6, 12] as GraphRange[]).map(r => (
+              <button key={r} style={s.toggleBtn(graphRange === r)} onClick={() => setGraphRange(r)}>
+                {r === 1 ? '1M' : r === 3 ? '3M' : r === 6 ? '6M' : '12M'}
+              </button>
+            ))}
           </div>
         </div>
 
