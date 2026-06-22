@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import Dashboard from './components/Dashboard'
-import TransactionList from './components/TransactionList'
+import TransactionsScreen from './components/TransactionsScreen'
 import ImportScreen from './components/ImportScreen'
 import CategoryManager from './components/CategoryManager'
 import './App.css'
@@ -206,7 +206,7 @@ function App() {
       {/* ── Screen content ── */}
       <main>
         {screen === 'dashboard'    && <Dashboard />}
-        {screen === 'transactions' && <TransactionList />}
+        {screen === 'transactions' && <TransactionsScreen />}
         {screen === 'categories'   && <CategoryManager />}
       </main>
 
