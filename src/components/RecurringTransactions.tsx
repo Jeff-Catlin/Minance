@@ -623,7 +623,10 @@ export default function RecurringTransactions() {
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '16px', gap: '12px', flexWrap: 'wrap' }}>
           <div>
             <p style={s.sectionTitle}>
-              {graphMode === 'historical' ? 'Recurring spend — last 12 months' : 'Projected recurring spend — next 12 months'}
+              {graphMode === 'historical'
+              ? `Recurring spend — ${graphRange === 1 ? 'this month' : `last ${graphRange} months`}`
+              : `Projected recurring spend — ${graphRange === 1 ? 'next month' : `next ${graphRange} months`}`
+            }
             </p>
             <p style={{ margin: 0, fontSize: '13px', color: 'var(--color-text-muted)' }}>
               {graphMode === 'historical' ? 'Monthly avg' : 'Projected avg'}:{' '}
