@@ -90,7 +90,7 @@ export async function parseFile(file: File): Promise<ParseResult> {
   for (const row of normalised) {
     const date = toISODate(row['date'])
     const amount = toAmount(row['amount'])
-    const type = String(row['type'] ?? '').trim().toLowerCase()
+    const type = String(row['type'] ?? '').trim().toLowerCase().replace(/\s+/g, '_')
     const vendor = String(row['vendor'] ?? '').trim()
 
     if (!date || amount === null || !['expense', 'income', 'card_payment'].includes(type) || !vendor) {
