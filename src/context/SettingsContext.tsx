@@ -12,10 +12,19 @@ export const CURRENCY_SYMBOLS: Record<Currency, string> = {
   JPY: '¥',
 }
 
+export type TaxFilingStatus =
+  | ''
+  | 'single'
+  | 'married_jointly'
+  | 'married_separately'
+  | 'head_of_household'
+  | 'qualifying_surviving_spouse'
+
 export interface AppSettings {
   displayName: string
   email: string
   age: string
+  taxFilingStatus: TaxFilingStatus
   currency: Currency
   darkMode: boolean
   defaultLanding: 'dashboard' | 'transactions' | 'categories'
@@ -26,6 +35,7 @@ const DEFAULTS: AppSettings = {
   displayName: '',
   email: '',
   age: '',
+  taxFilingStatus: '',
   currency: 'USD',
   darkMode: false,
   defaultLanding: 'dashboard',

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useSettings, CURRENCY_SYMBOLS } from '../context/SettingsContext'
-import type { Currency, AppSettings } from '../context/SettingsContext'
+import type { Currency, AppSettings, TaxFilingStatus } from '../context/SettingsContext'
 import { supabase } from '../lib/supabase'
 import {
   exportCategoriesCSV, exportTransactionsCSV,
@@ -119,6 +119,7 @@ function ProfileSection() {
     displayName: settings.displayName,
     email: settings.email,
     age: settings.age,
+    taxFilingStatus: settings.taxFilingStatus,
     currency: settings.currency,
   })
   const [saved, setSaved] = useState(false)
@@ -146,6 +147,17 @@ function ProfileSection() {
       <input style={{ ...sh.input, maxWidth: '120px' }} type="number" min="1" max="120"
         value={form.age} placeholder="—"
         onChange={e => setForm(f => ({ ...f, age: e.target.value }))} />
+
+      <label style={sh.label}>Tax Filing Status</label>
+      <select style={{ ...sh.select, maxWidth: '280px' }} value={form.taxFilingStatus}
+        onChange={e => setForm(f => ({ ...f, taxFilingStatus: e.target.value as TaxFilingStatus }))}>
+        <option value="">Prefer not to say</option>
+        <option value="single">Single</option>
+        <option value="married_jointly">Married Filing Jointly</option>
+        <option value="married_separately">Married Filing Separately</option>
+        <option value="head_of_household">Head of Household</option>
+        <option value="qualifying_surviving_spouse">Qualifying Surviving Spouse</option>
+      </select>
 
       <label style={sh.label}>Currency</label>
       <select style={{ ...sh.select, maxWidth: '240px' }} value={form.currency}

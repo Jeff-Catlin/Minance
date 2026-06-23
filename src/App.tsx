@@ -3,15 +3,17 @@ import { useSettings } from './context/SettingsContext'
 import Dashboard from './components/Dashboard'
 import TransactionsScreen from './components/TransactionsScreen'
 import CategoryManager from './components/CategoryManager'
+import SavingsTab from './components/SavingsTab'
 import SettingsPage from './components/SettingsPage'
 import './App.css'
 
-type Screen = 'dashboard' | 'transactions' | 'categories' | 'settings'
+type Screen = 'dashboard' | 'transactions' | 'categories' | 'savings' | 'settings'
 
 const NAV_ITEMS: { key: Exclude<Screen, 'settings'>; label: string }[] = [
   { key: 'dashboard',    label: 'Dashboard' },
   { key: 'transactions', label: 'Transactions' },
   { key: 'categories',   label: 'Categories' },
+  { key: 'savings',      label: 'Savings' },
 ]
 
 export default function App() {
@@ -147,6 +149,7 @@ export default function App() {
         {screen === 'dashboard'    && <Dashboard />}
         {screen === 'transactions' && <TransactionsScreen />}
         {screen === 'categories'   && <CategoryManager />}
+        {screen === 'savings'      && <SavingsTab />}
         {screen === 'settings'     && <SettingsPage onBack={closeSettings} />}
       </main>
     </div>
