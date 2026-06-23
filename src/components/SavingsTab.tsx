@@ -53,10 +53,14 @@ function getDefaultLimit(goalType: string, age: number | null): number | null {
   const n = age ?? 0
   switch (goalType) {
     case 'roth_ira':
-    case 'traditional_ira':   return n >= 50 ? 8000 : 7000
+    case 'traditional_ira':
+      return n >= 50 ? 8600 : 7500
     case '401k':
-    case 'roth_401k':         return n >= 50 ? 31000 : 23500
-    case 'hsa_individual':    return 4300
+    case 'roth_401k':
+      if (n >= 60 && n <= 63) return 35750  // $24,500 + $11,250 super catch-up (SECURE 2.0)
+      if (n >= 50)            return 32500  // $24,500 + $8,000 standard catch-up
+      return 24500
+    case 'hsa_individual':    return 4400
     case 'hsa_family':        return 8550
     default:                  return null
   }
@@ -318,7 +322,11 @@ function GoalModal({ categories, userAge, existingGoal, onSave, onClose }: AddGo
             {getDefaultLimit(goalType, userAge) && (
               <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '4px' }}>
                 2026 limit: ${getDefaultLimit(goalType, userAge)!.toLocaleString()}
-                {userAge && userAge >= 50 ? ' (catch-up)' : ''}
+                {userAge && (goalType === '401k' || goalType === 'roth_401k') && userAge >= 60 && userAge <= 63
+                  ? ' (ages 60–63 super catch-up)'
+                  : userAge && userAge >= 50
+                    ? ' (catch-up)'
+                    : ''}
               </div>
             )}
           </div>
