@@ -471,7 +471,7 @@ export default function TransactionList() {
                   <th style={{ ...s.th, textAlign: 'right' }}>Amount</th>
                   <th style={s.th}>Category</th>
                   <th style={s.th}>Type</th>
-                  <th style={{ ...s.th, width: '36px' }}></th>
+                  <th style={{ ...s.th, width: '64px' }}></th>
                 </tr>
               </thead>
               <tbody>
@@ -595,19 +595,19 @@ export default function TransactionList() {
                         </td>
 
                         {/* Actions */}
-                        <td style={{ ...s.td, width: '36px', padding: '10px 4px' }}>
+                        <td style={{ ...s.td, width: '64px', padding: '10px 4px' }}>
                           {isConfirming ? (
-                            <div style={{ display: 'flex', gap: '4px' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                               <button
                                 onClick={() => handleDelete(t.id)}
-                                style={{ fontFamily: 'inherit', fontSize: '11px', padding: '2px 6px', borderRadius: '4px', border: '1px solid var(--color-expense)', background: 'var(--color-expense)', color: '#fff', cursor: 'pointer' }}
+                                style={{ fontFamily: 'inherit', fontSize: '10px', padding: '2px 5px', borderRadius: '4px', border: '1px solid var(--color-expense)', background: 'var(--color-expense)', color: '#fff', cursor: 'pointer', whiteSpace: 'nowrap' }}
                                 title="Confirm delete"
-                              >✓</button>
+                              >✓ Delete</button>
                               <button
                                 onClick={() => setConfirmDeleteId(null)}
-                                style={{ fontFamily: 'inherit', fontSize: '11px', padding: '2px 6px', borderRadius: '4px', border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-muted)', cursor: 'pointer' }}
+                                style={{ fontFamily: 'inherit', fontSize: '10px', padding: '2px 5px', borderRadius: '4px', border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-muted)', cursor: 'pointer', whiteSpace: 'nowrap' }}
                                 title="Cancel"
-                              >✕</button>
+                              >✕ Cancel</button>
                             </div>
                           ) : (
                             <RowMenu items={[
