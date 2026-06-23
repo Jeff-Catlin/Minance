@@ -126,6 +126,7 @@ export default function TransactionList() {
   const [saving, setSaving] = useState<string | null>(null)
   const [expandedSplit, setExpandedSplit] = useState<string | null>(null)
   const [splitModal, setSplitModal] = useState<{ tx: Transaction; splits: TransactionSplit[] } | null>(null)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
 
   // Filters
   const [search, setSearch] = useState('')
@@ -168,6 +169,13 @@ export default function TransactionList() {
   }
 
   useEffect(() => { load() }, [])
+
+  async function handleDelete(txId: string) {
+    await supabase.from('transaction_splits').delete().eq('transaction_id', txId)
+    await supabase.from('transactions').delete().eq('id', txId)
+    setTransactions(prev => prev.filter(t => t.id !== txId))
+    setConfirmDeleteId(null)
+  }
 
   async function handleTypeChange(txId: string, newType: string) {
     setSaving(txId)
@@ -316,6 +324,7 @@ export default function TransactionList() {
                   <th style={s.th}>Description</th>
                   <th style={{ ...s.th, textAlign: 'right' }}>Amount</th>
                   <th style={s.th}>Category</th>
+                  <th style={{ ...s.th, width: '32px' }}></th>
                 </tr>
               </thead>
               <tbody>
@@ -437,10 +446,38 @@ export default function TransactionList() {
                             </div>
                           )}
                         </td>
+                        <td style={{ ...s.td, width: '32px', padding: '10px 8px' }}>
+                          {t.source !== 'sync' && (
+                            confirmDeleteId === t.id ? (
+                              <div style={{ display: 'flex', gap: '4px' }}>
+                                <button
+                                  onClick={() => handleDelete(t.id)}
+                                  style={{ fontFamily: 'inherit', fontSize: '11px', padding: '2px 6px', borderRadius: '4px', border: '1px solid var(--color-expense)', background: 'var(--color-expense)', color: '#fff', cursor: 'pointer' }}
+                                >
+                                  ✓
+                                </button>
+                                <button
+                                  onClick={() => setConfirmDeleteId(null)}
+                                  style={{ fontFamily: 'inherit', fontSize: '11px', padding: '2px 6px', borderRadius: '4px', border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-muted)', cursor: 'pointer' }}
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => setConfirmDeleteId(t.id)}
+                                title="Delete transaction"
+                                style={{ fontFamily: 'inherit', fontSize: '14px', padding: '2px 6px', borderRadius: '4px', border: 'none', background: 'transparent', color: 'var(--color-text-muted)', cursor: 'pointer', opacity: 0.4, lineHeight: 1 }}
+                              >
+                                ×
+                              </button>
+                            )
+                          )}
+                        </td>
                       </tr>
                       {t.is_split && isExpanded && (
                         <tr>
-                          <td colSpan={5} style={{ padding: '0 14px 12px 28px', background: 'var(--color-bg)' }}>
+                          <td colSpan={6} style={{ padding: '0 14px 12px 28px', background: 'var(--color-bg)' }}>
                             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                               <tbody>
                                 {txSplits.map(sp => (

@@ -152,6 +152,7 @@ export default function ImportScreen() {
       type: 'expense' as const,
       description: null,
       is_split: false,
+      source: 'import',
     }))
 
     const categorized = categorizeRows(result.rows, categories, transactions)
@@ -172,6 +173,7 @@ export default function ImportScreen() {
       description: r.description,
       vendor: r.vendor,
       category_id: r.category_id,
+      source: 'import',
     }))
 
     let imported = 0
@@ -213,8 +215,8 @@ export default function ImportScreen() {
           <strong>Optional:</strong> description · category
         </p>
         <p style={{ ...s.muted, marginTop: '8px' }}>
-          <strong>type</strong> must be either <code style={{ fontFamily: 'monospace', background: 'var(--color-border)', padding: '1px 4px', borderRadius: '4px' }}>expense</code> or <code style={{ fontFamily: 'monospace', background: 'var(--color-border)', padding: '1px 4px', borderRadius: '4px' }}>income</code>.
-          Amounts should be positive numbers — the type field determines direction.
+          <strong>type</strong> accepts <code style={{ fontFamily: 'monospace', background: 'var(--color-border)', padding: '1px 4px', borderRadius: '4px' }}>expense</code>, <code style={{ fontFamily: 'monospace', background: 'var(--color-border)', padding: '1px 4px', borderRadius: '4px' }}>income</code>, or <code style={{ fontFamily: 'monospace', background: 'var(--color-border)', padding: '1px 4px', borderRadius: '4px' }}>card payment</code>.
+          Amount signs are ignored — the type field determines direction.
         </p>
       </div>
 

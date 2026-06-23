@@ -27,6 +27,7 @@ export interface Transaction {
   vendor: string
   category_id: string | null
   is_split: boolean
+  source: string
   created_at: string
 }
 
