@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Category, Transaction, TransactionSplit } from '../types'
+import { useSettings } from '../context/SettingsContext'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -111,6 +112,7 @@ const s = {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function SplitModal({ transaction, existingSplits, categories, onSave, onClose }: SplitModalProps) {
+  const { currencySymbol } = useSettings()
   const initialLines: SplitLine[] = existingSplits.length >= 2
     ? existingSplits.map(sp => ({ key: nextKey(), amount: String(sp.amount), category_id: sp.category_id }))
     : [
@@ -159,7 +161,7 @@ export default function SplitModal({ transaction, existingSplits, categories, on
     if (remaining !== 0) {
       setError(
         remaining > 0
-          ? `$${formatAmount(remaining)} still unallocated — split lines must total $${formatAmount(total)}.`
+          ? `${currencySymbol}${formatAmount(remaining)} still unallocated — split lines must total $${formatAmount(total)}.`
           : `Split lines exceed the original amount by $${formatAmount(Math.abs(remaining))}.`
       )
       return
@@ -189,7 +191,7 @@ export default function SplitModal({ transaction, existingSplits, categories, on
         </p>
         <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', margin: '0 0 20px 0' }}>
           {transaction.vendor} · {formatDate(transaction.date)} · Original total:{' '}
-          <strong style={{ color: 'var(--color-text)' }}>${formatAmount(total)}</strong>
+          <strong style={{ color: 'var(--color-text)' }}>{currencySymbol}{formatAmount(total)}</strong>
         </p>
 
         {/* Column headers */}
@@ -203,7 +205,7 @@ export default function SplitModal({ transaction, existingSplits, categories, on
           {lines.map(line => (
             <div key={line.key} style={{ display: 'grid', gridTemplateColumns: '120px 1fr 28px', gap: '8px', alignItems: 'center' }}>
               <div style={{ position: 'relative' }}>
-                <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)', fontSize: '14px', pointerEvents: 'none' }}>$</span>
+                <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)', fontSize: '14px', pointerEvents: 'none' }}>{currencySymbol}</span>
                 <input
                   style={{ ...s.input, paddingLeft: '22px' }}
                   type="number"
@@ -260,7 +262,7 @@ export default function SplitModal({ transaction, existingSplits, categories, on
             fontVariantNumeric: 'tabular-nums',
             color: remaining === 0 ? 'var(--color-income)' : 'var(--color-expense)',
           }}>
-            {remaining === 0 ? '✓' : `$${formatAmount(Math.abs(remaining))}`}
+            {remaining === 0 ? '✓' : `${currencySymbol}${formatAmount(Math.abs(remaining))}`}
           </span>
         </div>
 

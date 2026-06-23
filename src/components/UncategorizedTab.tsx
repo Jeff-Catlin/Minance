@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Category, Transaction, TransactionSplit } from '../types'
 import SplitModal from './SplitModal'
+import { useSettings } from '../context/SettingsContext'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -108,6 +109,7 @@ interface UncategorizedTabProps {
 }
 
 export default function UncategorizedTab({ onCountChange }: UncategorizedTabProps) {
+  const { currencySymbol } = useSettings()
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
@@ -326,7 +328,7 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
                       fontWeight: 500,
                       color: t.type === 'income' ? 'var(--color-income)' : 'var(--color-expense)',
                     }}>
-                      {t.type === 'income' ? '+' : '−'}${formatAmount(t.amount)}
+                      {t.type === 'income' ? '+' : '−'}{currencySymbol}{formatAmount(t.amount)}
                     </td>
                     <td style={s.td}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>

@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, Fragment } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Category, Transaction, TransactionSplit } from '../types'
 import SplitModal from './SplitModal'
+import { useSettings } from '../context/SettingsContext'
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
@@ -117,6 +118,7 @@ interface TransactionRow extends Transaction {
 }
 
 export default function TransactionList() {
+  const { currencySymbol } = useSettings()
   const [transactions, setTransactions] = useState<TransactionRow[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [splitsMap, setSplitsMap] = useState<Map<string, TransactionSplit[]>>(new Map())
@@ -331,7 +333,7 @@ export default function TransactionList() {
                           fontWeight: 500,
                           color: t.type === 'income' ? 'var(--color-income)' : 'var(--color-expense)',
                         }}>
-                          {t.type === 'income' ? '+' : '−'}${formatAmount(t.amount)}
+                          {t.type === 'income' ? '+' : '−'}{currencySymbol}{formatAmount(t.amount)}
                         </td>
                         <td style={s.td}>
                           {t.is_split ? (
@@ -408,7 +410,7 @@ export default function TransactionList() {
                                       {catMap.get(sp.category_id) ?? 'Unknown category'}
                                     </td>
                                     <td style={{ padding: '4px 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--color-expense)', fontWeight: 500 }}>
-                                      ${formatAmount(sp.amount)}
+                                      {currencySymbol}{formatAmount(sp.amount)}
                                     </td>
                                   </tr>
                                 ))}

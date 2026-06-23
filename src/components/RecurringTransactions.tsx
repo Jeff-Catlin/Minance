@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Category, Transaction } from '../types'
+import { useSettings } from '../context/SettingsContext'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -239,6 +240,7 @@ function formatDate(iso: string) {
 // ── Bar Chart ─────────────────────────────────────────────────────────────────
 
 function BarChart({ data }: { data: { label: string; amount: number }[] }) {
+  const { currencySymbol } = useSettings()
   const max = Math.max(...data.map(d => d.amount), 1)
   const BAR_H = 100
   const BAR_W = 30
@@ -258,7 +260,7 @@ function BarChart({ data }: { data: { label: string; amount: number }[] }) {
           const x = i * (BAR_W + GAP)
           return (
             <g key={d.label}>
-              <title>{`${d.label}: $${formatAmount(d.amount)}`}</title>
+              <title>{`${d.label}: ${currencySymbol}${formatAmount(d.amount)}`}</title>
               <rect
                 x={x}
                 y={BAR_H - barH}
@@ -539,6 +541,7 @@ function AddRecurringModal({ categoryOptions, uniqueVendors, onSave, onClose }: 
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function RecurringTransactions() {
+  const { currencySymbol } = useSettings()
   const [recurring, setRecurring] = useState<RecurringEntry[]>([])
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [categories, setCategories] = useState<Category[]>([])
@@ -667,7 +670,7 @@ export default function RecurringTransactions() {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--color-text)' }}>{sg.vendor}</div>
                     <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '2px' }}>
-                      {cat?.name ?? 'Uncategorized'} · {sg.occurrences} occurrences · ~${formatAmount(sg.recentAmount)}
+                      {cat?.name ?? 'Uncategorized'} · {sg.occurrences} occurrences · ~{currencySymbol}{formatAmount(sg.recentAmount)}
                     </div>
                   </div>
                   <span style={s.cadenceBadge(sg.cadence)}>{CADENCE_LABELS[sg.cadence]}</span>
@@ -694,7 +697,7 @@ export default function RecurringTransactions() {
             </p>
             <p style={{ margin: 0, fontSize: '13px', color: 'var(--color-text-muted)', flexShrink: 0, marginLeft: '12px' }}>
               {graphMode === 'historical' ? 'Monthly avg' : 'Projected avg'}:{' '}
-              <strong style={{ color: 'var(--color-text)' }}>${formatAmount(monthlyAvg)}</strong>
+              <strong style={{ color: 'var(--color-text)' }}>{currencySymbol}{formatAmount(monthlyAvg)}</strong>
             </p>
           </div>
           <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
@@ -788,7 +791,7 @@ export default function RecurringTransactions() {
                           <tr key={t.id}>
                             <td style={{ padding: '6px 8px', color: 'var(--color-text-muted)' }}>{formatDate(t.date)}</td>
                             <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 500, color: 'var(--color-expense)', fontVariantNumeric: 'tabular-nums' }}>
-                              ${formatAmount(t.amount)}
+                              {currencySymbol}{formatAmount(t.amount)}
                             </td>
                           </tr>
                         ))}

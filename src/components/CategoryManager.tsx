@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Category } from '../types'
+import { useSettings } from '../context/SettingsContext'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -305,6 +306,7 @@ function RenameModal({ current, onSave, onClose }: { current: string; onSave: (n
 // ── Budget input ──────────────────────────────────────────────────────────────
 
 function BudgetInput({ category, onSave }: { category: Category; onSave: (id: string, val: number | null) => Promise<void> }) {
+  const { currencySymbol } = useSettings()
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState(category.monthly_budget !== null ? String(category.monthly_budget) : '')
 
@@ -352,7 +354,7 @@ function BudgetInput({ category, onSave }: { category: Category; onSave: (id: st
       onClick={() => setEditing(true)}
       style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '12px', fontFamily: 'inherit', padding: 0, color: category.monthly_budget !== null ? 'var(--color-primary-text)' : 'var(--color-text-muted)' }}
     >
-      {category.monthly_budget !== null ? `$${formatAmount(category.monthly_budget)}/mo` : '+ Set budget'}
+      {category.monthly_budget !== null ? `${currencySymbol}${formatAmount(category.monthly_budget)}/mo` : '+ Set budget'}
     </button>
   )
 }
@@ -360,6 +362,7 @@ function BudgetInput({ category, onSave }: { category: Category; onSave: (id: st
 // ── Budget bar ────────────────────────────────────────────────────────────────
 
 function BudgetBar({ spent, budget, isIncome }: { spent: number; budget: number | null; isIncome: boolean }) {
+  const { currencySymbol } = useSettings()
   const hasBudget = budget !== null && budget > 0
   const pct = hasBudget ? Math.min((spent / budget!) * 100, 100) : 0
   const over = hasBudget && (isIncome ? spent < budget! : spent > budget!)
@@ -373,13 +376,13 @@ function BudgetBar({ spent, budget, isIncome }: { spent: number; budget: number 
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
         <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>
-          ${formatAmount(spent)} spent this month
+          {currencySymbol}{formatAmount(spent)} spent this month
         </span>
         {hasBudget && diff !== null ? (
           <span style={{ fontSize: '11px', fontWeight: 500, color: over ? 'var(--color-expense)' : 'var(--color-income)' }}>
             {isIncome
-              ? over ? `$${formatAmount(diff)} below target` : `$${formatAmount(diff)} above target`
-              : over ? `$${formatAmount(diff)} over budget` : `$${formatAmount(diff)} remaining`}
+              ? over ? `${currencySymbol}${formatAmount(diff)} below target` : `${currencySymbol}${formatAmount(diff)} above target`
+              : over ? `${currencySymbol}${formatAmount(diff)} over budget` : `${currencySymbol}${formatAmount(diff)} remaining`}
           </span>
         ) : (
           <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>No budget set</span>
@@ -392,6 +395,7 @@ function BudgetBar({ spent, budget, isIncome }: { spent: number; budget: number 
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function CategoryManager() {
+  const { currencySymbol } = useSettings()
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
   const [spendMap, setSpendMap] = useState<Map<string, number>>(new Map())
@@ -600,7 +604,7 @@ export default function CategoryManager() {
                 {!hasChildren && <BudgetInput category={parent} onSave={handleSetBudget} />}
                 {hasChildren && parentBudget !== null && (
                   <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
-                    ${formatAmount(parentBudget)}/mo combined
+                    {currencySymbol}{formatAmount(parentBudget)}/mo combined
                   </span>
                 )}
               </div>

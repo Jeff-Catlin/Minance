@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Category, Transaction, TransactionSplit } from '../types'
+import { useSettings } from '../context/SettingsContext'
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
@@ -184,12 +185,13 @@ const s = {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function Dashboard() {
+  const { settings, currencySymbol } = useSettings()
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [splits, setSplits] = useState<TransactionSplit[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
 
-  const [preset, setPreset] = useState('month')
+  const [preset, setPreset] = useState<string>(settings.defaultPeriod)
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
 
@@ -341,8 +343,8 @@ export default function Dashboard() {
         {hasBudget && diff !== null && (
           <span style={{ fontSize: '10px', color: over ? 'var(--color-expense)' : 'var(--color-income)', fontWeight: 500 }}>
             {isIncome
-              ? over ? `$${formatAmount(diff)} below target` : `$${formatAmount(diff)} above target`
-              : over ? `$${formatAmount(diff)} over` : `$${formatAmount(diff)} left`}
+              ? over ? `${currencySymbol}${formatAmount(diff)} below target` : `${currencySymbol}${formatAmount(diff)} above target`
+              : over ? `${currencySymbol}${formatAmount(diff)} over` : `${currencySymbol}${formatAmount(diff)} left`}
           </span>
         )}
         {!hasBudget && (
