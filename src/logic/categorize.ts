@@ -31,6 +31,11 @@ export function categorizeRows(
   }
 
   return rows.map(row => {
+    // Card payments don't need categorization
+    if (row.type === 'card_payment') {
+      return { ...row, category_id: null, categoryName: null }
+    }
+
     // 1. Category text from file matches an existing category
     if (row.rawCategory) {
       const match = categoryByName.get(row.rawCategory.toLowerCase())

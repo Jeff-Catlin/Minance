@@ -10,7 +10,7 @@ export interface Category {
 export interface ParsedRow {
   date: string            // YYYY-MM-DD
   amount: number
-  type: 'expense' | 'income'
+  type: 'expense' | 'income' | 'card_payment'
   description: string | null
   vendor: string
   rawCategory: string | null   // text from the file
@@ -22,7 +22,7 @@ export interface Transaction {
   id: string
   date: string
   amount: number
-  type: 'expense' | 'income'
+  type: 'expense' | 'income' | 'card_payment'
   description: string | null
   vendor: string
   category_id: string | null

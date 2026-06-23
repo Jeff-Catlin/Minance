@@ -93,7 +93,7 @@ export async function parseFile(file: File): Promise<ParseResult> {
     const type = String(row['type'] ?? '').trim().toLowerCase()
     const vendor = String(row['vendor'] ?? '').trim()
 
-    if (!date || amount === null || !['expense', 'income'].includes(type) || !vendor) {
+    if (!date || amount === null || !['expense', 'income', 'card_payment'].includes(type) || !vendor) {
       skipped++
       continue
     }
@@ -101,7 +101,7 @@ export async function parseFile(file: File): Promise<ParseResult> {
     rows.push({
       date,
       amount,
-      type: type as 'expense' | 'income',
+      type: type as 'expense' | 'income' | 'card_payment',
       description: row['description'] ? String(row['description']).trim() : null,
       vendor,
       rawCategory: row['category'] ? String(row['category']).trim() : null,

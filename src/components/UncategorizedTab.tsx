@@ -126,6 +126,7 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
         .select('*')
         .is('category_id', null)
         .eq('is_split', false)
+        .neq('type', 'card_payment')
         .order('date', { ascending: false })
         .order('created_at', { ascending: false }),
       supabase.from('categories').select('*').eq('is_archived', false).order('name'),

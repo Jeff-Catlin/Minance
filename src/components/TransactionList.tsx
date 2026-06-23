@@ -169,6 +169,13 @@ export default function TransactionList() {
 
   useEffect(() => { load() }, [])
 
+  async function handleTypeChange(txId: string, newType: string) {
+    setSaving(txId)
+    await supabase.from('transactions').update({ type: newType, category_id: newType === 'card_payment' ? null : undefined }).eq('id', txId)
+    setSaving(null)
+    setTransactions(prev => prev.map(t => t.id === txId ? { ...t, type: newType as 'expense' | 'income' | 'card_payment', category_id: newType === 'card_payment' ? null : t.category_id, categoryName: newType === 'card_payment' ? null : t.categoryName } : t))
+  }
+
   async function handleCategoryChange(txId: string, newCategoryId: string) {
     setSaving(txId)
     const category_id = newCategoryId === '' ? null : newCategoryId
@@ -265,6 +272,7 @@ export default function TransactionList() {
           <option value="">All types</option>
           <option value="expense">Expenses</option>
           <option value="income">Income</option>
+          <option value="card_payment">Card Payments</option>
         </select>
 
         <input
@@ -331,9 +339,16 @@ export default function TransactionList() {
                           fontVariantNumeric: 'tabular-nums',
                           whiteSpace: 'nowrap',
                           fontWeight: 500,
-                          color: t.type === 'income' ? 'var(--color-income)' : 'var(--color-expense)',
+                          color: t.type === 'income'
+                            ? 'var(--color-income)'
+                            : t.type === 'card_payment'
+                              ? 'var(--color-text-muted)'
+                              : 'var(--color-expense)',
                         }}>
-                          {t.type === 'income' ? '+' : '−'}{currencySymbol}{formatAmount(t.amount)}
+                          {t.type === 'income' ? '+' : t.type === 'card_payment' ? '' : '−'}{currencySymbol}{formatAmount(t.amount)}
+                          {t.type === 'card_payment' && (
+                            <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', fontWeight: 400 }}>Card Payment</div>
+                          )}
                         </td>
                         <td style={s.td}>
                           {t.is_split ? (
@@ -361,6 +376,20 @@ export default function TransactionList() {
                                 Edit
                               </button>
                             </div>
+                          ) : t.type === 'card_payment' ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>No category needed</span>
+                              <select
+                                style={{ ...s.select, maxWidth: '120px', fontSize: '11px', padding: '3px 6px', opacity: saving === t.id ? 0.5 : 1 }}
+                                value={t.type}
+                                disabled={saving === t.id}
+                                onChange={e => handleTypeChange(t.id, e.target.value)}
+                              >
+                                <option value="expense">Expense</option>
+                                <option value="income">Income</option>
+                                <option value="card_payment">Card Payment</option>
+                              </select>
+                            </div>
                           ) : (
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                               <select
@@ -379,6 +408,16 @@ export default function TransactionList() {
                                     {opt.indent ? `  ${opt.label}` : opt.label}
                                   </option>
                                 ))}
+                              </select>
+                              <select
+                                style={{ ...s.select, maxWidth: '120px', fontSize: '11px', padding: '3px 6px', opacity: saving === t.id ? 0.5 : 1 }}
+                                value={t.type}
+                                disabled={saving === t.id}
+                                onChange={e => handleTypeChange(t.id, e.target.value)}
+                              >
+                                <option value="expense">Expense</option>
+                                <option value="income">Income</option>
+                                <option value="card_payment">Card Payment</option>
                               </select>
                               <button
                                 style={{

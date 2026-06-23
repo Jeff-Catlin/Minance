@@ -254,8 +254,10 @@ export default function Dashboard() {
     }
 
     // Sum transactions by category_id, using split amounts for split transactions
+    // Card payments are excluded entirely — they cancel with the matching bank debit
     const sumByCategory = new Map<string, number>()
     for (const t of transactions) {
+      if (t.type === 'card_payment') continue
       if (t.is_split) {
         for (const sp of splitsById.get(t.id) ?? []) {
           sumByCategory.set(sp.category_id, (sumByCategory.get(sp.category_id) ?? 0) + sp.amount)
@@ -266,7 +268,7 @@ export default function Dashboard() {
       }
     }
 
-    // Uncategorized totals (exclude split transactions — they're always fully categorized)
+    // Uncategorized totals (exclude split and card_payment transactions)
     const uncatExpense = transactions.filter(t => !t.category_id && !t.is_split && t.type === 'expense').reduce((s, t) => s + t.amount, 0)
     const uncatIncome  = transactions.filter(t => !t.category_id && !t.is_split && t.type === 'income').reduce((s, t) => s + t.amount, 0)
 
