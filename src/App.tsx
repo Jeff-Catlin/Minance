@@ -31,7 +31,7 @@ export default function App() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', maxWidth: '900px', margin: '0 auto', padding: '0 24px 48px' }}>
+    <div style={{ minHeight: '100vh', maxWidth: '1200px', margin: '0 auto', padding: '0 24px 48px' }}>
 
       {/* ── Top bar ── */}
       <header style={{
