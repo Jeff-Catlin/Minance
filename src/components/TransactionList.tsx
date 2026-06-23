@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, Fragment } from 'react'
+import { useState, useEffect, useMemo, Fragment, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Category, Transaction, TransactionSplit } from '../types'
 import SplitModal from './SplitModal'
@@ -109,6 +109,61 @@ function formatDate(iso: string) {
 
 function formatAmount(amount: number) {
   return amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+// ── Row dots menu ─────────────────────────────────────────────────────────────
+
+function RowMenu({ items }: { items: { label: string; danger?: boolean; onClick: () => void }[] }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    function onOutside(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onOutside)
+    return () => document.removeEventListener('mousedown', onOutside)
+  }, [open])
+
+  return (
+    <div style={{ position: 'relative', display: 'inline-block' }} ref={ref}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          fontFamily: 'inherit', fontSize: '16px', padding: '2px 6px',
+          background: 'transparent', border: 'none', cursor: 'pointer',
+          color: 'var(--color-text-muted)', lineHeight: 1, borderRadius: '4px',
+        }}
+        aria-label="Row actions"
+      >
+        ⋮
+      </button>
+      {open && (
+        <div style={{
+          position: 'absolute', right: 0, top: '100%', marginTop: '2px',
+          background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+          borderRadius: '8px', boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+          zIndex: 200, minWidth: '160px', overflow: 'hidden',
+        }}>
+          {items.map(item => (
+            <button
+              key={item.label}
+              onClick={() => { setOpen(false); item.onClick() }}
+              style={{
+                display: 'block', width: '100%', textAlign: 'left',
+                padding: '9px 14px', fontSize: '13px', fontFamily: 'inherit',
+                background: 'transparent', border: 'none', cursor: 'pointer',
+                color: item.danger ? 'var(--color-expense)' : 'var(--color-text)',
+              }}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -324,7 +379,8 @@ export default function TransactionList() {
                   <th style={s.th}>Description</th>
                   <th style={{ ...s.th, textAlign: 'right' }}>Amount</th>
                   <th style={s.th}>Category</th>
-                  <th style={{ ...s.th, width: '32px' }}></th>
+                  <th style={s.th}>Type</th>
+                  <th style={{ ...s.th, width: '36px' }}></th>
                 </tr>
               </thead>
               <tbody>
@@ -332,16 +388,25 @@ export default function TransactionList() {
                   const txSplits = splitsMap.get(t.id) ?? []
                   const catMap = new Map(categories.map(c => [c.id, c.name]))
                   const isExpanded = expandedSplit === t.id
+                  const isConfirming = confirmDeleteId === t.id
+
                   return (
                     <Fragment key={t.id}>
-                      <tr>
+                      <tr style={{ background: isConfirming ? 'rgba(224,107,107,0.04)' : undefined }}>
+                        {/* Date */}
                         <td style={{ ...s.td, whiteSpace: 'nowrap', color: 'var(--color-text-muted)', fontSize: '13px' }}>
                           {formatDate(t.date)}
                         </td>
+
+                        {/* Vendor */}
                         <td style={{ ...s.td, fontWeight: 500 }}>{t.vendor}</td>
+
+                        {/* Description */}
                         <td style={{ ...s.td, color: 'var(--color-text-muted)', fontSize: '13px' }}>
                           {t.description ?? '—'}
                         </td>
+
+                        {/* Amount */}
                         <td style={{
                           ...s.td,
                           textAlign: 'right',
@@ -355,25 +420,19 @@ export default function TransactionList() {
                               : 'var(--color-expense)',
                         }}>
                           {t.type === 'income' ? '+' : t.type === 'card_payment' ? '' : '−'}{currencySymbol}{formatAmount(t.amount)}
-                          {t.type === 'card_payment' && (
-                            <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', fontWeight: 400 }}>Card Payment</div>
-                          )}
                         </td>
+
+                        {/* Category */}
                         <td style={s.td}>
                           {t.is_split ? (
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                               <button
                                 onClick={() => setExpandedSplit(isExpanded ? null : t.id)}
                                 style={{
-                                  fontFamily: 'inherit',
-                                  fontSize: '12px',
-                                  padding: '3px 8px',
-                                  borderRadius: '20px',
-                                  border: '1px solid var(--color-primary-text)',
-                                  background: 'rgba(14,159,142,0.08)',
-                                  color: 'var(--color-primary-text)',
-                                  cursor: 'pointer',
-                                  fontWeight: 500,
+                                  fontFamily: 'inherit', fontSize: '12px', padding: '3px 8px',
+                                  borderRadius: '20px', border: '1px solid var(--color-primary-text)',
+                                  background: 'rgba(14,159,142,0.08)', color: 'var(--color-primary-text)',
+                                  cursor: 'pointer', fontWeight: 500,
                                 }}
                               >
                                 Split {isExpanded ? '▲' : '▼'}
@@ -386,19 +445,9 @@ export default function TransactionList() {
                               </button>
                             </div>
                           ) : t.type === 'card_payment' ? (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>No category needed</span>
-                              <select
-                                style={{ ...s.select, maxWidth: '120px', fontSize: '11px', padding: '3px 6px', opacity: saving === t.id ? 0.5 : 1 }}
-                                value={t.type}
-                                disabled={saving === t.id}
-                                onChange={e => handleTypeChange(t.id, e.target.value)}
-                              >
-                                <option value="expense">Expense</option>
-                                <option value="income">Income</option>
-                                <option value="card_payment">Card Payment</option>
-                              </select>
-                            </div>
+                            <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+                              No category needed
+                            </span>
                           ) : (
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                               <select
@@ -418,66 +467,75 @@ export default function TransactionList() {
                                   </option>
                                 ))}
                               </select>
-                              <select
-                                style={{ ...s.select, maxWidth: '120px', fontSize: '11px', padding: '3px 6px', opacity: saving === t.id ? 0.5 : 1 }}
-                                value={t.type}
-                                disabled={saving === t.id}
-                                onChange={e => handleTypeChange(t.id, e.target.value)}
-                              >
-                                <option value="expense">Expense</option>
-                                <option value="income">Income</option>
-                                <option value="card_payment">Card Payment</option>
-                              </select>
-                              <button
-                                style={{
-                                  fontFamily: 'inherit',
-                                  fontSize: '12px',
-                                  padding: '3px 8px',
-                                  borderRadius: '6px',
-                                  border: '1px solid var(--color-border)',
-                                  background: 'transparent',
-                                  color: 'var(--color-primary-text)',
-                                  cursor: 'pointer',
-                                }}
-                                onClick={() => setSplitModal({ tx: t, splits: [] })}
-                              >
-                                Split
-                              </button>
+                              {!t.is_split && (
+                                <button
+                                  style={{
+                                    fontFamily: 'inherit', fontSize: '12px', padding: '3px 8px',
+                                    borderRadius: '6px', border: '1px solid var(--color-border)',
+                                    background: 'transparent', color: 'var(--color-primary-text)', cursor: 'pointer',
+                                  }}
+                                  onClick={() => setSplitModal({ tx: t, splits: [] })}
+                                >
+                                  Split
+                                </button>
+                              )}
                             </div>
                           )}
                         </td>
-                        <td style={{ ...s.td, width: '32px', padding: '10px 8px' }}>
-                          {t.source !== 'sync' && (
-                            confirmDeleteId === t.id ? (
-                              <div style={{ display: 'flex', gap: '4px' }}>
-                                <button
-                                  onClick={() => handleDelete(t.id)}
-                                  style={{ fontFamily: 'inherit', fontSize: '11px', padding: '2px 6px', borderRadius: '4px', border: '1px solid var(--color-expense)', background: 'var(--color-expense)', color: '#fff', cursor: 'pointer' }}
-                                >
-                                  ✓
-                                </button>
-                                <button
-                                  onClick={() => setConfirmDeleteId(null)}
-                                  style={{ fontFamily: 'inherit', fontSize: '11px', padding: '2px 6px', borderRadius: '4px', border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-muted)', cursor: 'pointer' }}
-                                >
-                                  ✕
-                                </button>
-                              </div>
-                            ) : (
+
+                        {/* Type */}
+                        <td style={s.td}>
+                          {t.is_split ? (
+                            <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
+                              {t.type}
+                            </span>
+                          ) : (
+                            <select
+                              style={{ ...s.select, maxWidth: '130px', fontSize: '12px', opacity: saving === t.id ? 0.5 : 1 }}
+                              value={t.type}
+                              disabled={saving === t.id}
+                              onChange={e => handleTypeChange(t.id, e.target.value)}
+                            >
+                              <option value="expense">Expense</option>
+                              <option value="income">Income</option>
+                              <option value="card_payment">Card Payment</option>
+                            </select>
+                          )}
+                        </td>
+
+                        {/* Actions */}
+                        <td style={{ ...s.td, width: '36px', padding: '10px 4px' }}>
+                          {isConfirming ? (
+                            <div style={{ display: 'flex', gap: '4px' }}>
                               <button
-                                onClick={() => setConfirmDeleteId(t.id)}
-                                title="Delete transaction"
-                                style={{ fontFamily: 'inherit', fontSize: '14px', padding: '2px 6px', borderRadius: '4px', border: 'none', background: 'transparent', color: 'var(--color-text-muted)', cursor: 'pointer', opacity: 0.4, lineHeight: 1 }}
-                              >
-                                ×
-                              </button>
+                                onClick={() => handleDelete(t.id)}
+                                style={{ fontFamily: 'inherit', fontSize: '11px', padding: '2px 6px', borderRadius: '4px', border: '1px solid var(--color-expense)', background: 'var(--color-expense)', color: '#fff', cursor: 'pointer' }}
+                                title="Confirm delete"
+                              >✓</button>
+                              <button
+                                onClick={() => setConfirmDeleteId(null)}
+                                style={{ fontFamily: 'inherit', fontSize: '11px', padding: '2px 6px', borderRadius: '4px', border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-muted)', cursor: 'pointer' }}
+                                title="Cancel"
+                              >✕</button>
+                            </div>
+                          ) : (
+                            t.source !== 'sync' && (
+                              <RowMenu items={[
+                                {
+                                  label: 'Delete transaction',
+                                  danger: true,
+                                  onClick: () => setConfirmDeleteId(t.id),
+                                },
+                              ]} />
                             )
                           )}
                         </td>
                       </tr>
+
+                      {/* Split detail row */}
                       {t.is_split && isExpanded && (
                         <tr>
-                          <td colSpan={6} style={{ padding: '0 14px 12px 28px', background: 'var(--color-bg)' }}>
+                          <td colSpan={7} style={{ padding: '0 14px 12px 28px', background: 'var(--color-bg)' }}>
                             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                               <tbody>
                                 {txSplits.map(sp => (
