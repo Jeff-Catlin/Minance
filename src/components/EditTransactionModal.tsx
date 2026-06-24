@@ -19,7 +19,7 @@ export default function EditTransactionModal({ transaction, onSave, onClose }: E
   async function handleSave() {
     if (!vendor.trim())                                                        { setError('Vendor is required.'); return }
     if (!date)                                                                 { setError('Date is required.'); return }
-    if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0)      { setError('Please enter a valid amount.'); return }
+    if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) === 0)     { setError('Please enter a valid amount.'); return }
 
     setSaving(true)
     const { error: err } = await supabase.from('transactions').update({
@@ -68,8 +68,13 @@ export default function EditTransactionModal({ transaction, onSave, onClose }: E
           placeholder="Add a description…" onKeyDown={e => e.key === 'Enter' && handleSave()} />
 
         <label style={labelStyle}>Amount</label>
-        <input style={inputStyle} type="number" min="0.01" step="0.01" value={amount}
+        <input style={inputStyle} type="number" step="0.01" value={amount}
           onChange={e => setAmount(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSave()} />
+        {transaction.type === 'expense' && (
+          <p style={{ fontSize: '11px', color: 'var(--color-text-muted)', margin: '4px 0 0 0' }}>
+            Negative = refund/return · Positive = regular expense
+          </p>
+        )}
 
         {error && (
           <div style={{ marginTop: '12px', fontSize: '13px', padding: '8px 12px', borderRadius: '8px', background: 'rgba(224,107,107,0.1)', color: 'var(--color-expense)', border: '1px solid var(--color-expense)' }}>
