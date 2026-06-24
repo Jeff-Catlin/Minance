@@ -567,6 +567,10 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
         <TransactionDetailModal
           transaction={detailTx}
           account={detailTx.account_id ? accountsMap.get(detailTx.account_id) : undefined}
+          splits={detailTx.is_split ? (splitsMap.get(detailTx.id) ?? []).map(sp => ({
+            amount: sp.amount,
+            categoryName: categories.find(c => c.id === sp.category_id)?.name ?? null,
+          })) : undefined}
           onEdit={() => { setEditingTx(detailTx); setDetailTx(null) }}
           onDeleted={() => { setDetailTx(null); load() }}
           onClose={() => setDetailTx(null)}

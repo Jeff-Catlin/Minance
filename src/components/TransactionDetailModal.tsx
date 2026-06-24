@@ -3,9 +3,15 @@ import { supabase } from '../lib/supabase'
 import { useSettings } from '../context/SettingsContext'
 import type { Account, Transaction } from '../types'
 
+interface SplitLine {
+  amount: number
+  categoryName: string | null
+}
+
 interface TransactionDetailModalProps {
   transaction: Transaction & { categoryName?: string | null }
   account?: Account
+  splits?: SplitLine[]
   onEdit: () => void
   onDeleted: () => void
   onClose: () => void
@@ -20,7 +26,7 @@ function formatAmount(n: number) {
   return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-export default function TransactionDetailModal({ transaction: t, account, onEdit, onDeleted, onClose }: TransactionDetailModalProps) {
+export default function TransactionDetailModal({ transaction: t, account, splits, onEdit, onDeleted, onClose }: TransactionDetailModalProps) {
   const { currencySymbol } = useSettings()
   const [menuOpen, setMenuOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -99,18 +105,35 @@ export default function TransactionDetailModal({ transaction: t, account, onEdit
         </div>
 
         {/* Amount */}
-        <div style={{ marginBottom: '20px', padding: '16px', background: 'var(--color-bg)', borderRadius: '10px', textAlign: 'center' }}>
-          <div style={{ fontSize: '32px', fontWeight: 700, color: amountColor, fontVariantNumeric: 'tabular-nums' }}>
+        <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+          <span style={{ fontSize: '22px', fontWeight: 700, color: amountColor, fontVariantNumeric: 'tabular-nums' }}>
             {prefix}{currencySymbol}{formatAmount(Math.abs(t.amount))}
-          </div>
+          </span>
           {t.is_split && (
-            <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '4px' }}>Split transaction</div>
+            <span style={{ fontSize: '11px', color: 'var(--color-text-muted)', background: 'var(--color-border)', borderRadius: '10px', padding: '2px 7px' }}>Split</span>
           )}
         </div>
 
+        {/* Split breakdown */}
+        {t.is_split && splits && splits.length > 0 && (
+          <div style={{ marginBottom: '16px', border: '1px solid var(--color-border)', borderRadius: '8px', overflow: 'hidden' }}>
+            <div style={{ padding: '8px 12px', background: 'var(--color-bg)', borderBottom: '1px solid var(--color-border)' }}>
+              <span style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)' }}>Split breakdown</span>
+            </div>
+            {[...splits].sort((a, b) => b.amount - a.amount).map((sp, i) => (
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', borderBottom: i < splits.length - 1 ? '1px solid var(--color-border)' : 'none' }}>
+                <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>{sp.categoryName ?? 'Uncategorized'}</span>
+                <span style={{ fontSize: '13px', fontWeight: 500, color: amountColor, fontVariantNumeric: 'tabular-nums' }}>
+                  {prefix}{currencySymbol}{formatAmount(Math.abs(sp.amount))}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Fields */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 20px' }}>
-          {row('Category', t.categoryName ?? (t.is_split ? 'Split — see transactions' : 'Uncategorized'))}
+          {!t.is_split && row('Category', t.categoryName ?? 'Uncategorized')}
           <div style={{ marginBottom: '14px' }}>
             <div style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', marginBottom: '3px' }}>Account</div>
             {account ? (
