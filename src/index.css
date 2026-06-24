@@ -29,6 +29,14 @@
   --color-expense:      #F08A8A;
 }
 
+/* ── Date input color scheme (controls native calendar picker theme) ── */
+input[type="date"] {
+  color-scheme: light;
+}
+.dark input[type="date"] {
+  color-scheme: dark;
+}
+
 /* ── Base ── */
 *, *::before, *::after {
   box-sizing: border-box;
