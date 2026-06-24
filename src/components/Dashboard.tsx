@@ -9,33 +9,44 @@ function toISO(d: Date) {
   return d.toISOString().slice(0, 10)
 }
 
-function getPresetRange(preset: string): { from: string; to: string } {
+type Period = 'week' | 'month' | 'year'
+type Relative = 'current' | 'last'
+
+function getRange(period: Period, relative: Relative): { from: string; to: string } {
   const now = new Date()
   const y = now.getFullYear()
   const m = now.getMonth()
   const d = now.getDate()
 
-  if (preset === 'week') {
-    const day = now.getDay() // 0=Sun
-    const mon = new Date(now)
-    mon.setDate(d - ((day + 6) % 7))
-    const sun = new Date(mon)
-    sun.setDate(mon.getDate() + 6)
-    return { from: toISO(mon), to: toISO(sun) }
-  }
-  if (preset === 'month') {
-    return {
-      from: toISO(new Date(y, m, 1)),
-      to: toISO(new Date(y, m + 1, 0)),
+  if (period === 'week') {
+    const day = now.getDay()
+    const thisMon = new Date(now)
+    thisMon.setDate(d - ((day + 6) % 7))
+    if (relative === 'current') {
+      const sun = new Date(thisMon)
+      sun.setDate(thisMon.getDate() + 6)
+      return { from: toISO(thisMon), to: toISO(sun) }
+    } else {
+      const lastMon = new Date(thisMon)
+      lastMon.setDate(thisMon.getDate() - 7)
+      const lastSun = new Date(lastMon)
+      lastSun.setDate(lastMon.getDate() + 6)
+      return { from: toISO(lastMon), to: toISO(lastSun) }
     }
   }
-  if (preset === 'year') {
-    return {
-      from: toISO(new Date(y, 0, 1)),
-      to: toISO(new Date(y, 11, 31)),
+  if (period === 'month') {
+    if (relative === 'current') {
+      return { from: toISO(new Date(y, m, 1)), to: toISO(new Date(y, m + 1, 0)) }
+    } else {
+      return { from: toISO(new Date(y, m - 1, 1)), to: toISO(new Date(y, m, 0)) }
     }
   }
-  return { from: '', to: '' }
+  // year
+  if (relative === 'current') {
+    return { from: toISO(new Date(y, 0, 1)), to: toISO(new Date(y, 11, 31)) }
+  } else {
+    return { from: toISO(new Date(y - 1, 0, 1)), to: toISO(new Date(y - 1, 11, 31)) }
+  }
 }
 
 function formatAmount(n: number) {
@@ -191,28 +202,29 @@ export default function Dashboard() {
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
 
-  const [preset, setPreset] = useState<string>(settings.defaultPeriod)
+  const [period, setPeriod] = useState<Period>(settings.defaultPeriod as Period)
+  const [relative, setRelative] = useState<Relative>('current')
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
+  const isCustom = period === ('custom' as string)
 
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
   // Compute active date range
   const range = useMemo(() => {
-    if (preset === 'custom') return { from: customFrom, to: customTo }
-    return getPresetRange(preset)
-  }, [preset, customFrom, customTo])
+    if (isCustom) return { from: customFrom, to: customTo }
+    return getRange(period, relative)
+  }, [period, relative, customFrom, customTo, isCustom])
 
   const budgetMultiplier = useMemo(() => {
-    if (preset === 'week') return null
-    if (preset === 'month') return 1
-    if (preset === 'year') return 12
-    if (preset === 'custom' && range.from && range.to) {
+    if (isCustom && range.from && range.to) {
       const days = (new Date(range.to).getTime() - new Date(range.from).getTime()) / 86400000 + 1
       return days / 30.44
     }
+    if (period === 'month') return 1
+    if (period === 'year') return 12
     return null
-  }, [preset, range])
+  }, [period, isCustom, range])
 
   useEffect(() => {
     async function load() {
@@ -469,31 +481,41 @@ export default function Dashboard() {
 
       {/* Time filter */}
       <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap' }}>
-        {[
-          { key: 'week', label: 'This week' },
-          { key: 'month', label: 'This month' },
-          { key: 'year', label: 'This year' },
-          { key: 'custom', label: 'Custom' },
-        ].map(p => (
-          <button key={p.key} style={s.presetBtn(preset === p.key)} onClick={() => setPreset(p.key)}>
-            {p.label}
+        {/* Last / Current toggle — only shown when not on custom */}
+        {!isCustom && (
+          <>
+            <button style={s.presetBtn(relative === 'last')} onClick={() => setRelative('last')}>Last</button>
+            <button style={s.presetBtn(relative === 'current')} onClick={() => setRelative('current')}>Current</button>
+            <div style={{ width: '1px', background: 'var(--color-border)', alignSelf: 'stretch', margin: '0 2px' }} />
+          </>
+        )}
+
+        {/* Period buttons */}
+        {(['week', 'month', 'year'] as Period[]).map(p => (
+          <button
+            key={p}
+            style={s.presetBtn(!isCustom && period === p)}
+            onClick={() => { setPeriod(p) }}
+          >
+            {p.charAt(0).toUpperCase() + p.slice(1)}
           </button>
         ))}
-        {preset === 'custom' && (
+
+        <div style={{ width: '1px', background: 'var(--color-border)', alignSelf: 'stretch', margin: '0 2px' }} />
+
+        {/* Custom */}
+        <button
+          style={s.presetBtn(isCustom)}
+          onClick={() => setPeriod('custom' as Period)}
+        >
+          Custom
+        </button>
+
+        {isCustom && (
           <>
-            <input
-              type="date"
-              style={s.dateInput}
-              value={customFrom}
-              onChange={e => setCustomFrom(e.target.value)}
-            />
+            <input type="date" style={s.dateInput} value={customFrom} onChange={e => setCustomFrom(e.target.value)} />
             <span style={{ color: 'var(--color-text-muted)', fontSize: '13px' }}>–</span>
-            <input
-              type="date"
-              style={s.dateInput}
-              value={customTo}
-              onChange={e => setCustomTo(e.target.value)}
-            />
+            <input type="date" style={s.dateInput} value={customTo} onChange={e => setCustomTo(e.target.value)} />
           </>
         )}
       </div>
