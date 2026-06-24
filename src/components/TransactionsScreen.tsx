@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { supabase } from '../lib/supabase'
 import TransactionList from './TransactionList'
 import RecurringTransactions from './RecurringTransactions'
 import UncategorizedTab from './UncategorizedTab'
@@ -21,6 +22,17 @@ interface TransactionsScreenProps {
 export default function TransactionsScreen({ initialFilter, filterKey = 0, initialSubTab }: TransactionsScreenProps) {
   const [subTab, setSubTab] = useState<SubTab>(initialSubTab ?? 'all')
   const [uncategorizedCount, setUncategorizedCount] = useState<number | null>(null)
+
+  // Fetch count on mount so the badge shows immediately without clicking the tab
+  useEffect(() => {
+    supabase
+      .from('transactions')
+      .select('id', { count: 'exact', head: true })
+      .is('category_id', null)
+      .eq('is_split', false)
+      .neq('type', 'card_payment')
+      .then(({ count }) => setUncategorizedCount(count ?? 0))
+  }, [])
 
   const SUB_TABS: { key: SubTab; label: () => string }[] = [
     { key: 'all', label: () => 'All Transactions' },
