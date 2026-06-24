@@ -211,16 +211,40 @@ export default function ImportScreen() {
 
       {/* Format guide */}
       <div style={s.card}>
-        <p style={s.subheading}>Required file format</p>
-        <p style={s.muted}>Your spreadsheet (.xlsx or .csv) must have these column headers in the first row:</p>
-        <p style={{ ...s.muted, fontFamily: 'monospace', marginTop: '8px' }}>
-          <strong>Required:</strong> date · amount · type · vendor<br />
-          <strong>Optional:</strong> description · category · account
-        </p>
-        <p style={{ ...s.muted, marginTop: '8px' }}>
-          <strong>type</strong> accepts <code style={{ fontFamily: 'monospace', background: 'var(--color-border)', padding: '1px 4px', borderRadius: '4px' }}>expense</code>, <code style={{ fontFamily: 'monospace', background: 'var(--color-border)', padding: '1px 4px', borderRadius: '4px' }}>income</code>, or <code style={{ fontFamily: 'monospace', background: 'var(--color-border)', padding: '1px 4px', borderRadius: '4px' }}>card payment</code>.
-          For expenses, a <strong>negative amount</strong> = purchase; a <strong>positive amount</strong> = refund/return (reduces the expense total).
-        </p>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' }}>
+          <div style={{ flex: 1 }}>
+            <p style={s.subheading}>Required file format</p>
+            <p style={s.muted}>Your spreadsheet (.xlsx or .csv) must have these column headers in the first row:</p>
+            <p style={{ ...s.muted, fontFamily: 'monospace', marginTop: '8px' }}>
+              <strong>Required:</strong> date · amount · type · vendor<br />
+              <strong>Optional:</strong> description · category · account
+            </p>
+            <p style={{ ...s.muted, marginTop: '8px' }}>
+              <strong>type</strong> accepts <code style={{ fontFamily: 'monospace', background: 'var(--color-border)', padding: '1px 4px', borderRadius: '4px' }}>expense</code>, <code style={{ fontFamily: 'monospace', background: 'var(--color-border)', padding: '1px 4px', borderRadius: '4px' }}>income</code>, or <code style={{ fontFamily: 'monospace', background: 'var(--color-border)', padding: '1px 4px', borderRadius: '4px' }}>card payment</code>.
+              For expenses, a <strong>negative amount</strong> = purchase; a <strong>positive amount</strong> = refund/return (reduces the expense total).
+            </p>
+          </div>
+          <button
+            onClick={() => {
+              const csv = 'date,amount,type,vendor,description,category,account\n'
+              const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+              const url = URL.createObjectURL(blob)
+              const a = document.createElement('a')
+              a.href = url
+              a.download = 'minance-import-template.csv'
+              a.click()
+              URL.revokeObjectURL(url)
+            }}
+            style={{
+              fontFamily: 'inherit', fontSize: '13px', fontWeight: 500,
+              padding: '7px 14px', borderRadius: '8px', cursor: 'pointer',
+              border: '1px solid var(--color-border)', background: 'transparent',
+              color: 'var(--color-primary-text)', whiteSpace: 'nowrap', flexShrink: 0,
+            }}
+          >
+            ↓ Download template
+          </button>
+        </div>
       </div>
 
       {/* Upload area */}
