@@ -20,6 +20,16 @@ export default function App() {
   const { settings } = useSettings()
   const [screen, setScreen] = useState<Screen>(settings.defaultLanding)
   const [prevScreen, setPrevScreen] = useState<Exclude<Screen, 'settings'>>('dashboard')
+  const [txFilter, setTxFilter] = useState<{ categoryId: string; from: string; to: string } | null>(null)
+  const [txFilterKey, setTxFilterKey] = useState(0)
+
+  function handleDrillDown(categoryId: string, from: string, to: string) {
+    setTxFilter({ categoryId, from, to })
+    setTxFilterKey(k => k + 1)
+    setScreen('transactions')
+    // Clear after mount so subsequent tab visits start clean
+    setTimeout(() => setTxFilter(null), 100)
+  }
 
   function openSettings() {
     if (screen !== 'settings') setPrevScreen(screen as Exclude<Screen, 'settings'>)
@@ -146,8 +156,8 @@ export default function App() {
 
       {/* ── Screen content ── */}
       <main>
-        {screen === 'dashboard'    && <Dashboard />}
-        {screen === 'transactions' && <TransactionsScreen />}
+        {screen === 'dashboard'    && <Dashboard onDrillDown={handleDrillDown} />}
+        {screen === 'transactions' && <TransactionsScreen initialFilter={txFilter} filterKey={txFilterKey} />}
         {screen === 'categories'   && <CategoryManager />}
         {screen === 'savings'      && <SavingsTab />}
         {screen === 'settings'     && <SettingsPage onBack={closeSettings} />}

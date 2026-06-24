@@ -119,7 +119,13 @@ interface TransactionRow extends Transaction {
   categoryName: string | null
 }
 
-export default function TransactionList() {
+interface DrillDownFilter {
+  categoryId: string
+  from: string
+  to: string
+}
+
+export default function TransactionList({ initialFilter }: { initialFilter?: DrillDownFilter | null }) {
   const { currencySymbol } = useSettings()
   const [transactions, setTransactions] = useState<TransactionRow[]>([])
   const [categories, setCategories] = useState<Category[]>([])
@@ -131,12 +137,12 @@ export default function TransactionList() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [editingTx, setEditingTx] = useState<TransactionRow | null>(null)
 
-  // Filters
+  // Filters — initialized from drilldown if provided
   const [search, setSearch] = useState('')
-  const [filterCategory, setFilterCategory] = useState('')
+  const [filterCategory, setFilterCategory] = useState(initialFilter?.categoryId ?? '')
   const [filterType, setFilterType] = useState('')
-  const [filterFrom, setFilterFrom] = useState('')
-  const [filterTo, setFilterTo] = useState('')
+  const [filterFrom, setFilterFrom] = useState(initialFilter?.from ?? '')
+  const [filterTo, setFilterTo] = useState(initialFilter?.to ?? '')
 
   async function load() {
     const [{ data: txns }, { data: cats }, { data: splits }] = await Promise.all([

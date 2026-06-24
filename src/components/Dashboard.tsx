@@ -195,7 +195,11 @@ const s = {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function Dashboard() {
+interface DashboardProps {
+  onDrillDown?: (categoryId: string, from: string, to: string) => void
+}
+
+export default function Dashboard({ onDrillDown }: DashboardProps) {
   const { settings, currencySymbol } = useSettings()
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [splits, setSplits] = useState<TransactionSplit[]>([])
@@ -420,7 +424,20 @@ export default function Dashboard() {
                         {expanded.has(row.parentId) ? '▼' : '▶'}
                       </span>
                     )}
-                    {row.parentName}
+                    <span
+                      onClick={e => {
+                        e.stopPropagation()
+                        onDrillDown?.(row.parentId, range.from, range.to)
+                      }}
+                      style={onDrillDown ? {
+                        cursor: 'pointer',
+                        borderBottom: '1px dashed var(--color-border)',
+                        paddingBottom: '1px',
+                      } : undefined}
+                      title={onDrillDown ? 'View transactions' : undefined}
+                    >
+                      {row.parentName}
+                    </span>
                     {renderBudgetBar(row.parentTotal, scaledParentBudget, isIncome)}
                   </td>
                   <td style={{ ...s.parentTd(color), textAlign: 'right', fontVariantNumeric: 'tabular-nums', verticalAlign: 'top' }}>
@@ -439,7 +456,17 @@ export default function Dashboard() {
                   return (
                     <tr key={child.id}>
                       <td style={s.childTd()}>
-                        {child.name}
+                        <span
+                          onClick={() => onDrillDown?.(child.id, range.from, range.to)}
+                          style={onDrillDown ? {
+                            cursor: 'pointer',
+                            borderBottom: '1px dashed var(--color-border)',
+                            paddingBottom: '1px',
+                          } : undefined}
+                          title={onDrillDown ? 'View transactions' : undefined}
+                        >
+                          {child.name}
+                        </span>
                         {renderBudgetBar(child.total, scaledChildBudget, isIncome)}
                       </td>
                       <td style={{ ...s.childTd(color), textAlign: 'right', fontVariantNumeric: 'tabular-nums', opacity: 0.8, verticalAlign: 'top' }}>

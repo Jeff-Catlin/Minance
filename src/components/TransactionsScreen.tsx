@@ -5,8 +5,19 @@ import UncategorizedTab from './UncategorizedTab'
 
 type SubTab = 'all' | 'uncategorized' | 'recurring'
 
-export default function TransactionsScreen() {
-  const [subTab, setSubTab] = useState<SubTab>('all')
+interface DrillDownFilter {
+  categoryId: string
+  from: string
+  to: string
+}
+
+interface TransactionsScreenProps {
+  initialFilter?: DrillDownFilter | null
+  filterKey?: number
+}
+
+export default function TransactionsScreen({ initialFilter, filterKey = 0 }: TransactionsScreenProps) {
+  const [subTab, setSubTab] = useState<SubTab>(initialFilter ? 'all' : 'all')
   const [uncategorizedCount, setUncategorizedCount] = useState<number | null>(null)
 
   const SUB_TABS: { key: SubTab; label: () => string }[] = [
@@ -59,7 +70,9 @@ export default function TransactionsScreen() {
         })}
       </nav>
 
-      {subTab === 'all' && <TransactionList />}
+      {subTab === 'all' && (
+        <TransactionList key={filterKey} initialFilter={initialFilter} />
+      )}
       {subTab === 'uncategorized' && (
         <UncategorizedTab onCountChange={setUncategorizedCount} />
       )}
