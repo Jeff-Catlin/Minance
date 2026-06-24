@@ -272,9 +272,23 @@ export default function Dashboard() {
     const uncatExpense = transactions.filter(t => !t.category_id && !t.is_split && t.type === 'expense').reduce((s, t) => s + t.amount, 0)
     const uncatIncome  = transactions.filter(t => !t.category_id && !t.is_split && t.type === 'income').reduce((s, t) => s + t.amount, 0)
 
-    function buildRows(type: 'expense' | 'income') {
-      const typeTxns = transactions.filter(t => t.type === type)
+    // Split-aware category total — checks split lines for split transactions
+    function getCategoryTotal(catId: string, type: 'expense' | 'income'): number {
+      let total = 0
+      for (const t of transactions) {
+        if (t.type !== type) continue
+        if (t.is_split) {
+          for (const sp of splitsById.get(t.id) ?? []) {
+            if (sp.category_id === catId) total += sp.amount
+          }
+        } else {
+          if (t.category_id === catId) total += t.amount
+        }
+      }
+      return total
+    }
 
+    function buildRows(type: 'expense' | 'income') {
       const rows: {
         parentId: string
         parentName: string
@@ -285,20 +299,11 @@ export default function Dashboard() {
       for (const parent of parents) {
         const children = childrenOf(parent.id)
 
-        // Only include categories that have transactions of the right type
         const childRows = children
-          .map(c => {
-            const total = typeTxns
-              .filter(t => t.category_id === c.id)
-              .reduce((s, t) => s + t.amount, 0)
-            return { id: c.id, name: c.name, total }
-          })
+          .map(c => ({ id: c.id, name: c.name, total: getCategoryTotal(c.id, type) }))
           .filter(c => c.total > 0)
 
-        const directTotal = typeTxns
-          .filter(t => t.category_id === parent.id)
-          .reduce((s, t) => s + t.amount, 0)
-
+        const directTotal = getCategoryTotal(parent.id, type)
         const parentTotal = directTotal + childRows.reduce((s, c) => s + c.total, 0)
 
         if (parentTotal > 0) {

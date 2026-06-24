@@ -209,8 +209,18 @@ export default function TransactionList() {
     return transactions.filter(t => {
       if (q && !t.vendor.toLowerCase().includes(q) && !(t.description ?? '').toLowerCase().includes(q)) return false
       if (filterCategory) {
-        if (filterCategory === '__none__') { if (t.category_id) return false }
-        else if (t.category_id !== filterCategory) return false
+        if (filterCategory === '__none__') {
+          // split transactions are considered categorized
+          if (t.category_id || t.is_split) return false
+        } else {
+          if (t.is_split) {
+            // check if any split line matches the selected category
+            const txSplits = splitsMap.get(t.id) ?? []
+            if (!txSplits.some(sp => sp.category_id === filterCategory)) return false
+          } else {
+            if (t.category_id !== filterCategory) return false
+          }
+        }
       }
       if (filterType && t.type !== filterType) return false
       if (filterFrom && t.date < filterFrom) return false
