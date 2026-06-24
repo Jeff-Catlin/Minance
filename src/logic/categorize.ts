@@ -1,23 +1,15 @@
 import type { Category, ParsedRow, Transaction } from '../types'
 
-/**
- * Path C categorization logic (per PRD):
- * 1. Row's category text matches an existing category name → use it
- * 2. Most recent existing transaction with same vendor has a category → use it
- * 3. Leave uncategorized (null)
- */
 export function categorizeRows(
   rows: ParsedRow[],
   categories: Category[],
   existingTransactions: Transaction[],
 ): ParsedRow[] {
-  // Build a lowercase name → category map for fast lookup
   const categoryByName = new Map<string, Category>()
   for (const cat of categories) {
     categoryByName.set(cat.name.toLowerCase(), cat)
   }
 
-  // Build vendor → most recent categorized transaction map
   const vendorCategory = new Map<string, { category_id: string; categoryName: string }>()
   const sorted = [...existingTransactions]
     .filter(t => t.category_id)
@@ -31,26 +23,25 @@ export function categorizeRows(
   }
 
   return rows.map(row => {
-    // Card payments don't need categorization
     if (row.type === 'card_payment') {
-      return { ...row, category_id: null, categoryName: null }
+      return { ...row, category_id: null, categoryName: null, categorySource: null }
     }
 
-    // 1. Category text from file matches an existing category
+    // 1. Category text from file matches an existing category name → blue
     if (row.rawCategory) {
       const match = categoryByName.get(row.rawCategory.toLowerCase())
       if (match) {
-        return { ...row, category_id: match.id, categoryName: match.name }
+        return { ...row, category_id: match.id, categoryName: match.name, categorySource: 'name' as const }
       }
     }
 
-    // 2. Vendor memory
+    // 2. Vendor memory → yellow
     const vendorMatch = vendorCategory.get(row.vendor.toLowerCase())
     if (vendorMatch) {
-      return { ...row, category_id: vendorMatch.category_id, categoryName: vendorMatch.categoryName }
+      return { ...row, category_id: vendorMatch.category_id, categoryName: vendorMatch.categoryName, categorySource: 'vendor' as const }
     }
 
-    // 3. Uncategorized
-    return { ...row, category_id: null, categoryName: null }
+    // 3. Uncategorized → grey
+    return { ...row, category_id: null, categoryName: null, categorySource: null }
   })
 }

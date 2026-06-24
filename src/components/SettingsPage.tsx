@@ -462,7 +462,7 @@ export default function SettingsPage({ onBack: _onBack }: { onBack: () => void }
       </div>
 
       {/* Content */}
-      <div style={{ flex: 1, paddingLeft: '40px', maxWidth: '580px' }}>
+      <div style={{ flex: 1, paddingLeft: '40px', maxWidth: section === 'data' ? 'none' : '580px' }}>
         {section === 'profile'       && <ProfileSection />}
         {section === 'preferences'   && <PreferencesSection />}
         {section === 'data'          && <DataPrivacySection />}

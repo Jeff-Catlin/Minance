@@ -19,6 +19,7 @@ export interface ParsedRow {
   rawCategory: string | null   // text from the file
   category_id: string | null   // resolved by categorizer
   categoryName: string | null  // display name for preview
+  categorySource: 'name' | 'vendor' | null  // how category was assigned
 }
 
 export interface Account {

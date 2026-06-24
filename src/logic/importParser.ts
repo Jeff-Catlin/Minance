@@ -113,6 +113,7 @@ export async function parseFile(file: File): Promise<ParseResult> {
       rawCategory: row['category'] ? String(row['category']).trim() : null,
       category_id: null,
       categoryName: null,
+      categorySource: null,
     })
   }
 

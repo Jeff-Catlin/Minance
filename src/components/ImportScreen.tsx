@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import { parseFile } from '../logic/importParser'
 import { categorizeRows } from '../logic/categorize'
@@ -139,9 +139,26 @@ export default function ImportScreen() {
   const [saving, setSaving] = useState(false)
   const [parseError, setParseError] = useState<string | null>(null)
   const [rows, setRows] = useState<ParsedRow[] | null>(null)
+  const [previewCategories, setPreviewCategories] = useState<Category[]>([])
   const [skipped, setSkipped] = useState(0)
   const [fileName, setFileName] = useState('')
   const [saveResult, setSaveResult] = useState<{ imported: number; skipped: number } | null>(null)
+
+  const categoryOptions = useMemo(() => {
+    const parents = previewCategories.filter(c => c.parent_id === null)
+    return parents.flatMap(p => [
+      { id: p.id, label: p.name, indent: false },
+      ...previewCategories.filter(c => c.parent_id === p.id).map(c => ({ id: c.id, label: c.name, indent: true })),
+    ])
+  }, [previewCategories])
+
+  function updateRowCategory(index: number, categoryId: string) {
+    const cat = previewCategories.find(c => c.id === categoryId)
+    setRows(prev => prev ? prev.map((r, i) => i === index
+      ? { ...r, category_id: categoryId || null, categoryName: cat?.name ?? null }
+      : r
+    ) : null)
+  }
 
   async function handleFile(file: File) {
     setParsing(true)
@@ -167,6 +184,7 @@ export default function ImportScreen() {
 
     const categories: Category[] = cats ?? []
     const accounts: Account[] = (accts ?? []) as Account[]
+    setPreviewCategories(categories)
     const transactions: Transaction[] = (txns ?? []).map(t => ({
       ...t,
       date: '',
@@ -227,7 +245,9 @@ export default function ImportScreen() {
     if (file) handleFile(file)
   }
 
-  const uncategorizedCount = rows ? rows.filter(r => !r.category_id).length : 0
+  const uncategorizedCount  = rows ? rows.filter(r => !r.category_id).length : 0
+  const autoAssignedCount   = rows ? rows.filter(r => r.categorySource === 'vendor').length : 0
+  const nameMatchCount      = rows ? rows.filter(r => r.categorySource === 'name').length : 0
 
   return (
     <div>
@@ -326,10 +346,24 @@ export default function ImportScreen() {
                 {rows.length.toLocaleString()} transaction{rows.length !== 1 ? 's' : ''} ready to import
                 {skipped > 0 && <span style={{ color: 'var(--color-expense)', fontWeight: 400, fontSize: '13px' }}> · {skipped} row{skipped !== 1 ? 's' : ''} skipped (invalid)</span>}
               </p>
-              {uncategorizedCount > 0 && (
-                <p style={{ ...s.muted, marginTop: '4px' }}>
-                  {uncategorizedCount} transaction{uncategorizedCount !== 1 ? 's' : ''} could not be auto-categorized — you can assign them after import.
-                </p>
+              {(autoAssignedCount > 0 || nameMatchCount > 0 || uncategorizedCount > 0) && (
+                <div style={{ display: 'flex', gap: '16px', marginTop: '6px', flexWrap: 'wrap' }}>
+                  {nameMatchCount > 0 && (
+                    <span style={{ fontSize: '12px', color: '#3B82F6', fontWeight: 500 }}>
+                      ■ {nameMatchCount} from import file
+                    </span>
+                  )}
+                  {autoAssignedCount > 0 && (
+                    <span style={{ fontSize: '12px', color: '#D97706', fontWeight: 500 }}>
+                      ■ {autoAssignedCount} auto-assigned — review before saving
+                    </span>
+                  )}
+                  {uncategorizedCount > 0 && (
+                    <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', fontWeight: 500 }}>
+                      ■ {uncategorizedCount} uncategorized
+                    </span>
+                  )}
+                </div>
               )}
             </div>
             <div style={{ display: 'flex', gap: '8px' }}>
@@ -370,12 +404,34 @@ export default function ImportScreen() {
                       {((row.type === 'expense' && row.amount < 0) || (row.type === 'income' && row.amount >= 0)) ? '+' : '−'}${Math.abs(row.amount).toFixed(2)}
                     </td>
                     <td style={s.td}>{row.type}</td>
-                    <td style={{
-                      ...s.td,
-                      color: row.categoryName ? 'var(--color-text)' : 'var(--color-text-muted)',
-                      fontStyle: row.categoryName ? 'normal' : 'italic',
-                    }}>
-                      {row.categoryName ?? 'Uncategorized'}
+                    <td style={s.td}>
+                      <select
+                        value={row.category_id ?? ''}
+                        onChange={e => updateRowCategory(i, e.target.value)}
+                        style={{
+                          fontFamily: 'inherit',
+                          fontSize: '12px',
+                          padding: '3px 6px',
+                          borderRadius: '6px',
+                          border: '1px solid var(--color-border)',
+                          background: 'var(--color-bg)',
+                          cursor: 'pointer',
+                          width: '100%',
+                          color: row.categorySource === 'name'
+                            ? '#3B82F6'
+                            : row.categorySource === 'vendor'
+                              ? '#D97706'
+                              : 'var(--color-text-muted)',
+                          fontStyle: row.category_id ? 'normal' : 'italic',
+                        }}
+                      >
+                        <option value="">Uncategorized</option>
+                        {categoryOptions.map(opt => (
+                          <option key={opt.id} value={opt.id}>
+                            {opt.indent ? `  ${opt.label}` : opt.label}
+                          </option>
+                        ))}
+                      </select>
                     </td>
                     <td style={{
                       ...s.td,
