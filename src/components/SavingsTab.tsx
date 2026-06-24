@@ -585,6 +585,12 @@ export default function SavingsTab() {
         return (
           <div
             key={goal.id}
+            draggable
+            onDragStart={() => setDragGoalId(goal.id)}
+            onDragEnd={() => { setDragGoalId(null); setDragOverId(null) }}
+            onDragOver={e => { e.preventDefault(); setDragOverId(goal.id) }}
+            onDragLeave={() => setDragOverId(null)}
+            onDrop={() => handleDrop(goal.id)}
             style={{
               ...s.card,
               opacity: isDragging ? 0.45 : 1,
@@ -592,23 +598,11 @@ export default function SavingsTab() {
                 ? '2px solid var(--color-primary)'
                 : '1px solid var(--color-border)',
               transition: 'opacity 0.15s, border 0.1s',
+              cursor: isDragging ? 'grabbing' : 'grab',
             }}
-            onDragOver={e => { e.preventDefault(); setDragOverId(goal.id) }}
-            onDragLeave={() => setDragOverId(null)}
-            onDrop={() => handleDrop(goal.id)}
           >
             {/* Goal header */}
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
-              {/* Drag handle */}
-              <div
-                draggable
-                onDragStart={() => setDragGoalId(goal.id)}
-                onDragEnd={() => { setDragGoalId(null); setDragOverId(null) }}
-                style={{ cursor: 'grab', color: 'var(--color-text-muted)', fontSize: '16px', paddingTop: '2px', userSelect: 'none', flexShrink: 0 }}
-                title="Drag to reorder"
-              >
-                ⠿
-              </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '4px' }}>
                   <span style={{ fontSize: '16px', fontWeight: 600, color: 'var(--color-text)' }}>{goal.name}</span>
@@ -631,11 +625,11 @@ export default function SavingsTab() {
                   </div>
                 )}
               </div>
-              <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
-                <button style={s.btn('small')} onClick={() => setAddEntryGoal(goal)}>+ Entry</button>
-                <button style={s.btn('small')} onClick={() => setEditGoal(goal)}>Edit</button>
+              <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }} onMouseDown={e => e.stopPropagation()}>
+                <button style={{ ...s.btn('small'), cursor: 'pointer' }} onClick={() => setAddEntryGoal(goal)}>+ Entry</button>
+                <button style={{ ...s.btn('small'), cursor: 'pointer' }} onClick={() => setEditGoal(goal)}>Edit</button>
                 <button
-                  style={{ ...s.btn('small'), color: 'var(--color-expense)', borderColor: 'var(--color-expense)' }}
+                  style={{ ...s.btn('small'), color: 'var(--color-expense)', borderColor: 'var(--color-expense)', cursor: 'pointer' }}
                   onClick={() => deleteGoal(goal.id)}
                 >
                   Remove
