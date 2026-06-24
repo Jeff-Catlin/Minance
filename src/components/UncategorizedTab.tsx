@@ -236,7 +236,11 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
 
   if (loading) return <p style={{ color: 'var(--color-text-muted)' }}>Loading…</p>
 
-  const displayed = filterAccount ? transactions.filter(t => t.account_id === filterAccount) : transactions
+  const displayed = filterAccount === '__no_account__'
+    ? transactions.filter(t => t.account_id === null)
+    : filterAccount
+      ? transactions.filter(t => t.account_id === filterAccount)
+      : transactions
   const allSelected = selected.size === displayed.length && displayed.length > 0
 
   return (
@@ -260,6 +264,7 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
             onChange={e => setFilterAccount(e.target.value)}
           >
             <option value="">All accounts</option>
+            <option value="__no_account__">No account assigned</option>
             {accounts.map(a => (
               <option key={a.id} value={a.id}>
                 {a.name}{a.last_four ? ` ••••${a.last_four}` : ''}

@@ -258,7 +258,10 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
       if (filterType && t.type !== filterType) return false
       if (filterFrom && t.date < filterFrom) return false
       if (filterTo && t.date > filterTo) return false
-      if (filterAccount && t.account_id !== filterAccount) return false
+      if (filterAccount) {
+        if (filterAccount === '__no_account__') { if (t.account_id !== null) return false }
+        else if (t.account_id !== filterAccount) return false
+      }
       return true
     })
   }, [transactions, search, filterCategory, matchingCategoryIds, filterType, filterFrom, filterTo, filterAccount, splitsMap])
@@ -353,6 +356,7 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
         {accounts.length > 0 && (
           <select style={{ ...s.filterSelect, flexShrink: 0 }} value={filterAccount} onChange={e => setFilterAccount(e.target.value)}>
             <option value="">All accounts</option>
+            <option value="__no_account__">No account assigned</option>
             {accounts.map(a => (
               <option key={a.id} value={a.id}>
                 {a.name}{a.last_four ? ` ••••${a.last_four}` : ''}
