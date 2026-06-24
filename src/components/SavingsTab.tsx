@@ -452,7 +452,18 @@ export default function SavingsTab() {
   const [transactions, setTxns]     = useState<Transaction[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading]       = useState(true)
-  const [expanded, setExpanded]     = useState<Set<string>>(new Set())
+  const [expanded, setExpanded]       = useState<Set<string>>(new Set())
+  const [showAllGoals, setShowAllGoals] = useState<Set<string>>(new Set())
+
+  const CONTRIBUTION_LIMIT = 10
+
+  function toggleShowAll(goalId: string) {
+    setShowAllGoals(prev => {
+      const next = new Set(prev)
+      next.has(goalId) ? next.delete(goalId) : next.add(goalId)
+      return next
+    })
+  }
   const [addGoalOpen, setAddGoalOpen]     = useState(false)
   const [editGoal, setEditGoal]           = useState<SavingsGoal | null>(null)
   const [addEntryGoal, setAddEntryGoal]   = useState<SavingsGoal | null>(null)
@@ -616,74 +627,77 @@ export default function SavingsTab() {
             </div>
 
             {/* Expand / collapse contributions */}
-            <button
-              onClick={() => toggleExpand(goal.id)}
-              style={{
-                fontFamily: 'inherit', fontSize: '12px', color: 'var(--color-text-muted)',
-                background: 'transparent', border: 'none', cursor: 'pointer', padding: '8px 0 0',
-              }}
-            >
-              {isOpen ? '▲ Hide contributions' : `▼ Show contributions (${goalEntries.length + linkedCatTxns.length})`}
-            </button>
+            {(() => {
+              // Merge manual entries + linked transactions into one chronological list
+              type ContribItem =
+                | { kind: 'manual'; id: string; date: string; amount: number; note: string | null }
+                | { kind: 'category'; id: string; date: string; amount: number; vendor: string }
 
-            {isOpen && (
-              <div style={{ marginTop: '8px', paddingTop: '12px', borderTop: '1px solid var(--color-border)' }}>
+              const allContribs: ContribItem[] = [
+                ...goalEntries.map(e => ({ kind: 'manual' as const, id: e.id, date: e.date, amount: e.amount, note: e.note })),
+                ...linkedCatTxns.map(t => ({ kind: 'category' as const, id: t.id, date: t.date, amount: t.amount, vendor: t.vendor })),
+              ].sort((a, b) => b.date.localeCompare(a.date))
 
-                {/* Manual entries */}
-                {goalEntries.length > 0 && (
-                  <div style={{ marginBottom: '12px' }}>
-                    <div style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', marginBottom: '6px' }}>
-                      Manual entries
+              const totalCount = allContribs.length
+              const showingAll = showAllGoals.has(goal.id)
+              const visible = showingAll ? allContribs : allContribs.slice(0, CONTRIBUTION_LIMIT)
+
+              return (
+                <>
+                  <button
+                    onClick={() => toggleExpand(goal.id)}
+                    style={{ fontFamily: 'inherit', fontSize: '12px', color: 'var(--color-text-muted)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '8px 0 0' }}
+                  >
+                    {isOpen ? '▲ Hide contributions' : `▼ Show contributions (${totalCount})`}
+                  </button>
+
+                  {isOpen && (
+                    <div style={{ marginTop: '8px', paddingTop: '12px', borderTop: '1px solid var(--color-border)' }}>
+                      {totalCount === 0 ? (
+                        <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', margin: 0 }}>
+                          No contributions yet — add a manual entry or link a category.
+                        </p>
+                      ) : (
+                        <>
+                          {visible.map(item => (
+                            <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--color-border)' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                                <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', flexShrink: 0 }}>{formatDate(item.date)}</span>
+                                {item.kind === 'manual' ? (
+                                  <>
+                                    <span style={{ fontSize: '11px', background: 'var(--color-border)', color: 'var(--color-text-muted)', borderRadius: '10px', padding: '1px 6px', flexShrink: 0 }}>Manual</span>
+                                    {item.note && <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.note}</span>}
+                                  </>
+                                ) : (
+                                  <span style={{ fontSize: '13px', color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.vendor}</span>
+                                )}
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                                <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--color-income)', fontVariantNumeric: 'tabular-nums' }}>
+                                  {formatAmount(item.amount, currencySymbol)}
+                                </span>
+                                {item.kind === 'manual' && (
+                                  <button onClick={() => deleteEntry(item.id)} style={{ fontFamily: 'inherit', fontSize: '13px', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', padding: '0 2px', lineHeight: 1 }}>×</button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+
+                          {totalCount > CONTRIBUTION_LIMIT && (
+                            <button
+                              onClick={() => toggleShowAll(goal.id)}
+                              style={{ fontFamily: 'inherit', fontSize: '12px', color: 'var(--color-primary-text)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '8px 0 0' }}
+                            >
+                              {showingAll ? '▲ Show less' : `▼ Show all ${totalCount} contributions`}
+                            </button>
+                          )}
+                        </>
+                      )}
                     </div>
-                    {goalEntries.map(e => (
-                      <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: '1px solid var(--color-border)' }}>
-                        <div>
-                          <span style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginRight: '10px' }}>{formatDate(e.date)}</span>
-                          {e.note && <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>{e.note}</span>}
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--color-income)' }}>
-                            {formatAmount(e.amount, currencySymbol)}
-                          </span>
-                          <button
-                            onClick={() => deleteEntry(e.id)}
-                            style={{ fontFamily: 'inherit', fontSize: '12px', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', padding: '0 2px' }}
-                          >
-                            ×
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Category transactions */}
-                {linkedCatTxns.length > 0 && (
-                  <div>
-                    <div style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', marginBottom: '6px' }}>
-                      From "{catMap.get(goal.linked_category_id!) ?? 'category'}" transactions
-                    </div>
-                    {linkedCatTxns.map(t => (
-                      <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid var(--color-border)' }}>
-                        <div>
-                          <span style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginRight: '10px' }}>{formatDate(t.date)}</span>
-                          <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>{t.vendor}</span>
-                        </div>
-                        <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--color-income)' }}>
-                          {formatAmount(t.amount, currencySymbol)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {goalEntries.length === 0 && linkedCatTxns.length === 0 && (
-                  <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', margin: 0 }}>
-                    No contributions yet — add a manual entry or link a category.
-                  </p>
-                )}
-              </div>
-            )}
+                  )}
+                </>
+              )
+            })()}
           </div>
         )
       })}
