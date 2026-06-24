@@ -195,6 +195,37 @@ const s = {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
+// ── Drill-down link ───────────────────────────────────────────────────────────
+
+function DrillLink({ name, onClick, stopProp = false }: {
+  name: string
+  onClick?: (e: React.MouseEvent) => void
+  stopProp?: boolean
+}) {
+  const [hovered, setHovered] = useState(false)
+  if (!onClick) return <>{name}</>
+  return (
+    <span
+      onClick={e => { if (stopProp) e.stopPropagation(); onClick(e) }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      title="View transactions"
+      style={{
+        cursor: 'pointer',
+        borderRadius: '4px',
+        padding: '1px 5px',
+        margin: '-1px -5px',
+        transition: 'background 0.12s, color 0.12s',
+        background: hovered ? 'rgba(34,195,166,0.12)' : 'transparent',
+        color: hovered ? 'var(--color-primary-text)' : undefined,
+        display: 'inline-block',
+      }}
+    >
+      {name}
+    </span>
+  )
+}
+
 interface DashboardProps {
   onDrillDown?: (categoryId: string, from: string, to: string) => void
 }
@@ -424,20 +455,11 @@ export default function Dashboard({ onDrillDown }: DashboardProps) {
                         {expanded.has(row.parentId) ? '▼' : '▶'}
                       </span>
                     )}
-                    <span
-                      onClick={e => {
-                        e.stopPropagation()
-                        onDrillDown?.(row.parentId, range.from, range.to)
-                      }}
-                      style={onDrillDown ? {
-                        cursor: 'pointer',
-                        borderBottom: '1px dashed var(--color-border)',
-                        paddingBottom: '1px',
-                      } : undefined}
-                      title={onDrillDown ? 'View transactions' : undefined}
-                    >
-                      {row.parentName}
-                    </span>
+                    <DrillLink
+                      name={row.parentName}
+                      onClick={onDrillDown ? () => onDrillDown(row.parentId, range.from, range.to) : undefined}
+                      stopProp
+                    />
                     {renderBudgetBar(row.parentTotal, scaledParentBudget, isIncome)}
                   </td>
                   <td style={{ ...s.parentTd(color), textAlign: 'right', fontVariantNumeric: 'tabular-nums', verticalAlign: 'top' }}>
@@ -456,17 +478,10 @@ export default function Dashboard({ onDrillDown }: DashboardProps) {
                   return (
                     <tr key={child.id}>
                       <td style={s.childTd()}>
-                        <span
-                          onClick={() => onDrillDown?.(child.id, range.from, range.to)}
-                          style={onDrillDown ? {
-                            cursor: 'pointer',
-                            borderBottom: '1px dashed var(--color-border)',
-                            paddingBottom: '1px',
-                          } : undefined}
-                          title={onDrillDown ? 'View transactions' : undefined}
-                        >
-                          {child.name}
-                        </span>
+                        <DrillLink
+                          name={child.name}
+                          onClick={onDrillDown ? () => onDrillDown(child.id, range.from, range.to) : undefined}
+                        />
                         {renderBudgetBar(child.total, scaledChildBudget, isIncome)}
                       </td>
                       <td style={{ ...s.childTd(color), textAlign: 'right', fontVariantNumeric: 'tabular-nums', opacity: 0.8, verticalAlign: 'top' }}>

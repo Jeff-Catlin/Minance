@@ -210,21 +210,27 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
 
   // ── Filtering ──────────────────────────────────────────────────────────────
 
+  // When a parent category is selected, also match transactions under its children
+  const matchingCategoryIds = useMemo(() => {
+    if (!filterCategory || filterCategory === '__none__') return null
+    const ids = new Set([filterCategory])
+    categories.filter(c => c.parent_id === filterCategory).forEach(c => ids.add(c.id))
+    return ids
+  }, [filterCategory, categories])
+
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
     return transactions.filter(t => {
       if (q && !t.vendor.toLowerCase().includes(q) && !(t.description ?? '').toLowerCase().includes(q)) return false
       if (filterCategory) {
         if (filterCategory === '__none__') {
-          // split transactions are considered categorized
           if (t.category_id || t.is_split) return false
         } else {
           if (t.is_split) {
-            // check if any split line matches the selected category
             const txSplits = splitsMap.get(t.id) ?? []
-            if (!txSplits.some(sp => sp.category_id === filterCategory)) return false
+            if (!txSplits.some(sp => matchingCategoryIds!.has(sp.category_id))) return false
           } else {
-            if (t.category_id !== filterCategory) return false
+            if (!matchingCategoryIds!.has(t.category_id ?? '')) return false
           }
         }
       }
@@ -233,7 +239,7 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
       if (filterTo && t.date > filterTo) return false
       return true
     })
-  }, [transactions, search, filterCategory, filterType, filterFrom, filterTo])
+  }, [transactions, search, filterCategory, matchingCategoryIds, filterType, filterFrom, filterTo, splitsMap])
 
   const hasFilters = search || filterCategory || filterType || filterFrom || filterTo
 
