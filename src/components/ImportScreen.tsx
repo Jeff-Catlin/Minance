@@ -248,6 +248,14 @@ export default function ImportScreen() {
   const uncategorizedCount  = rows ? rows.filter(r => !r.category_id).length : 0
   const autoAssignedCount   = rows ? rows.filter(r => r.categorySource === 'vendor').length : 0
   const nameMatchCount      = rows ? rows.filter(r => r.categorySource === 'name').length : 0
+  const [sourceFilter, setSourceFilter] = useState<'all' | 'vendor' | 'name' | 'none'>('all')
+
+  const filteredRows = rows
+    ? sourceFilter === 'all'    ? rows
+    : sourceFilter === 'vendor' ? rows.filter(r => r.categorySource === 'vendor')
+    : sourceFilter === 'name'   ? rows.filter(r => r.categorySource === 'name')
+    : rows.filter(r => !r.category_id)
+    : null
 
   return (
     <div>
@@ -376,6 +384,31 @@ export default function ImportScreen() {
             </div>
           </div>
 
+          {/* Source filter buttons */}
+          <div style={{ display: 'flex', gap: '6px', marginBottom: '10px', flexWrap: 'wrap' }}>
+            {[
+              { key: 'all',    label: `All (${rows.length})`,                    color: 'var(--color-text-muted)' },
+              ...(autoAssignedCount > 0 ? [{ key: 'vendor', label: `Auto-assigned (${autoAssignedCount})`, color: '#D97706' }] : []),
+              ...(nameMatchCount > 0    ? [{ key: 'name',   label: `From file (${nameMatchCount})`,        color: '#3B82F6' }] : []),
+              ...(uncategorizedCount > 0 ? [{ key: 'none',  label: `Uncategorized (${uncategorizedCount})`, color: 'var(--color-text-muted)' }] : []),
+            ].map(f => (
+              <button
+                key={f.key}
+                onClick={() => setSourceFilter(f.key as typeof sourceFilter)}
+                style={{
+                  fontFamily: 'inherit', fontSize: '12px', fontWeight: 500,
+                  padding: '4px 12px', borderRadius: '20px', cursor: 'pointer',
+                  border: `1px solid ${sourceFilter === f.key ? f.color : 'var(--color-border)'}`,
+                  background: sourceFilter === f.key ? `${f.color}18` : 'transparent',
+                  color: sourceFilter === f.key ? f.color : 'var(--color-text-muted)',
+                  transition: 'all 0.1s',
+                }}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+
           <div style={{ ...s.card, padding: 0, overflow: 'auto', maxHeight: '480px' }}>
             <table style={s.table}>
               <thead style={{ position: 'sticky', top: 0, background: 'var(--color-surface)' }}>
@@ -390,8 +423,10 @@ export default function ImportScreen() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row, i) => (
-                  <tr key={i}>
+                {(filteredRows ?? []).map((row, i) => {
+                  const globalIndex = rows!.indexOf(row)
+                  return (
+                    <tr key={i} style={{ background: row.categorySource === 'vendor' ? 'rgba(217,119,6,0.04)' : row.categorySource === 'name' ? 'rgba(59,130,246,0.04)' : undefined }}>
                     <td style={s.td}>{row.date}</td>
                     <td style={s.td}>{row.vendor}</td>
                     <td style={{ ...s.td, color: 'var(--color-text-muted)' }}>{row.description ?? '—'}</td>
@@ -407,7 +442,7 @@ export default function ImportScreen() {
                     <td style={s.td}>
                       <select
                         value={row.category_id ?? ''}
-                        onChange={e => updateRowCategory(i, e.target.value)}
+                        onChange={e => updateRowCategory(globalIndex, e.target.value)}
                         style={{
                           fontFamily: 'inherit',
                           fontSize: '12px',
@@ -441,7 +476,8 @@ export default function ImportScreen() {
                       {row.accountName ?? (row.account ? `${row.account} (no match)` : '—')}
                     </td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           </div>
