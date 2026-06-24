@@ -548,6 +548,8 @@ export default function RecurringTransactions() {
   const [dismissedKeys, setDismissedKeys] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [expandedSuggestions, setExpandedSuggestions] = useState<Set<string>>(new Set())
+  const [showAllSuggestions, setShowAllSuggestions] = useState<Set<string>>(new Set())
   const [graphMode, setGraphMode] = useState<GraphMode>('historical')
   const [graphFilter, setGraphFilter] = useState<GraphFilter>('all')
   const [graphRange, setGraphRange] = useState<GraphRange>(1)
@@ -653,31 +655,80 @@ export default function RecurringTransactions() {
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {suggestions.map(sg => {
-              const cat = sg.category_id ? catMap.get(sg.category_id) : null
+              const cat    = sg.category_id ? catMap.get(sg.category_id) : null
+              const sgKey  = `${sg.vendor}|||${sg.category_id ?? ''}`
+              const isOpen = expandedSuggestions.has(sgKey)
+              const showingAll = showAllSuggestions.has(sgKey)
+              const LIMIT  = 5
+
+              const sgTxns = transactions
+                .filter(t => t.vendor === sg.vendor && t.category_id === sg.category_id)
+                .sort((a, b) => b.date.localeCompare(a.date))
+              const visible = showingAll ? sgTxns : sgTxns.slice(0, LIMIT)
+
               return (
                 <div
-                  key={`${sg.vendor}|||${sg.category_id}`}
+                  key={sgKey}
                   style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '12px',
-                    padding: '10px 14px',
                     background: 'var(--color-bg)',
                     borderRadius: '8px',
                     border: '1px solid var(--color-border)',
+                    overflow: 'hidden',
                   }}
                 >
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--color-text)' }}>{sg.vendor}</div>
-                    <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '2px' }}>
-                      {cat?.name ?? 'Uncategorized'} · {sg.occurrences} occurrences · ~{currencySymbol}{formatAmount(sg.recentAmount)}
+                  {/* Main row */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 14px' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--color-text)' }}>{sg.vendor}</div>
+                      <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                        {cat?.name ?? 'Uncategorized'} · {sg.occurrences} occurrences · ~{currencySymbol}{formatAmount(sg.recentAmount)}
+                      </div>
+                    </div>
+                    <span style={s.cadenceBadge(sg.cadence)}>{CADENCE_LABELS[sg.cadence]}</span>
+                    <button
+                      onClick={() => setExpandedSuggestions(prev => {
+                        const next = new Set(prev)
+                        next.has(sgKey) ? next.delete(sgKey) : next.add(sgKey)
+                        return next
+                      })}
+                      style={{ fontFamily: 'inherit', fontSize: '11px', color: 'var(--color-text-muted)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '0 2px' }}
+                    >
+                      {isOpen ? '▲' : '▼'}
+                    </button>
+                    <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                      <button style={s.btn('confirm')} onClick={() => handleConfirm(sg)}>Confirm</button>
+                      <button style={s.btn('dismiss')} onClick={() => handleDismiss(sg)}>Dismiss</button>
                     </div>
                   </div>
-                  <span style={s.cadenceBadge(sg.cadence)}>{CADENCE_LABELS[sg.cadence]}</span>
-                  <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
-                    <button style={s.btn('confirm')} onClick={() => handleConfirm(sg)}>Confirm</button>
-                    <button style={s.btn('dismiss')} onClick={() => handleDismiss(sg)}>Dismiss</button>
-                  </div>
+
+                  {/* Expandable transactions */}
+                  {isOpen && (
+                    <div style={{ borderTop: '1px solid var(--color-border)', padding: '8px 14px 10px' }}>
+                      {visible.map(t => (
+                        <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid var(--color-border)' }}>
+                          <div style={{ display: 'flex', gap: '12px' }}>
+                            <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', flexShrink: 0 }}>{formatDate(t.date)}</span>
+                            <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>{t.vendor}</span>
+                          </div>
+                          <span style={{ fontSize: '12px', fontWeight: 500, fontVariantNumeric: 'tabular-nums', color: t.amount < 0 && t.type === 'expense' ? 'var(--color-income)' : 'var(--color-expense)' }}>
+                            {t.amount < 0 && t.type === 'expense' ? '+' : '−'}{currencySymbol}{formatAmount(Math.abs(t.amount))}
+                          </span>
+                        </div>
+                      ))}
+                      {sgTxns.length > LIMIT && (
+                        <button
+                          onClick={() => setShowAllSuggestions(prev => {
+                            const next = new Set(prev)
+                            next.has(sgKey) ? next.delete(sgKey) : next.add(sgKey)
+                            return next
+                          })}
+                          style={{ fontFamily: 'inherit', fontSize: '11px', color: 'var(--color-primary-text)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '6px 0 0' }}
+                        >
+                          {showingAll ? '▲ Show less' : `▼ Show all ${sgTxns.length} transactions`}
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               )
             })}
