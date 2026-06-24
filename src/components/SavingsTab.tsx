@@ -461,7 +461,7 @@ export default function SavingsTab() {
     const [{ data: g }, { data: e }, { data: t }, { data: c }] = await Promise.all([
       supabase.from('savings_goals').select('*').order('created_at'),
       supabase.from('savings_entries').select('*').order('date', { ascending: false }),
-      supabase.from('transactions').select('*'),
+      supabase.from('transactions').select('*').order('date', { ascending: false }),
       supabase.from('categories').select('*').eq('is_archived', false),
     ])
     setGoals(g ?? [])
@@ -530,13 +530,15 @@ export default function SavingsTab() {
         const isOpen = expanded.has(goal.id)
         const goalEntries = entriesByGoal.get(goal.id) ?? []
         const linkedCatTxns = goal.linked_category_id
-          ? transactions.filter(t => {
-              if (t.category_id !== goal.linked_category_id) return false
-              if (goal.tracking_mode === 'annual_contribution' && goal.year) {
-                return t.date >= `${goal.year}-01-01` && t.date <= `${goal.year}-12-31`
-              }
-              return true
-            })
+          ? transactions
+              .filter(t => {
+                if (t.category_id !== goal.linked_category_id) return false
+                if (goal.tracking_mode === 'annual_contribution' && goal.year) {
+                  return t.date >= `${goal.year}-01-01` && t.date <= `${goal.year}-12-31`
+                }
+                return true
+              })
+              .sort((a, b) => b.date.localeCompare(a.date))
           : []
 
         return (
