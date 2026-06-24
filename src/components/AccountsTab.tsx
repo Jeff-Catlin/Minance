@@ -55,12 +55,10 @@ function AccountModal({ existing, onSave, onClose }: {
   onSave: () => void
   onClose: () => void
 }) {
-  const { currencySymbol } = useSettings()
   const [name,        setName]        = useState(existing?.name ?? '')
   const [institution, setInstitution] = useState(existing?.institution ?? '')
   const [type,        setType]        = useState(existing?.type ?? 'credit_card')
   const [lastFour,    setLastFour]    = useState(existing?.last_four ?? '')
-  const [balance,     setBalance]     = useState(existing?.balance != null ? String(existing.balance) : '')
   const [color,       setColor]       = useState(existing?.color ?? ACCOUNT_COLORS[0])
   const [notes,       setNotes]       = useState(existing?.notes ?? '')
   const [error,       setError]       = useState('')
@@ -75,7 +73,6 @@ function AccountModal({ existing, onSave, onClose }: {
       type,
       last_four: lastFour.replace(/\D/g, '').slice(-4) || null,
       color,
-      balance: balance !== '' && !isNaN(parseFloat(balance)) ? parseFloat(balance) : null,
       notes: notes.trim() || null,
     }
     const { error: err } = existing
@@ -113,10 +110,6 @@ function AccountModal({ existing, onSave, onClose }: {
           <div>
             <label style={sh.label}>Last Four Digits <span style={{ fontWeight: 400 }}>(optional)</span></label>
             <input style={sh.input} value={lastFour} onChange={e => setLastFour(e.target.value)} placeholder="4567" maxLength={4} />
-          </div>
-          <div>
-            <label style={sh.label}>Balance <span style={{ fontWeight: 400 }}>(optional)</span></label>
-            <input style={sh.input} type="number" step="0.01" value={balance} onChange={e => setBalance(e.target.value)} placeholder={`${currencySymbol}0.00`} />
           </div>
         </div>
 
@@ -157,14 +150,18 @@ function AccountModal({ existing, onSave, onClose }: {
 
 // ── Account card ──────────────────────────────────────────────────────────────
 
-function AccountCard({ account, onEdit, onArchive, onViewTransactions }: {
+function AccountCard({ account, balance, txCount, onEdit, onArchive, onViewTransactions }: {
   account: Account
+  balance?: number
+  txCount?: number
   onEdit: () => void
   onArchive: () => void
   onViewTransactions: () => void
 }) {
   const { currencySymbol } = useSettings()
   const color = account.color ?? '#A8A29E'
+  const hasBalance = balance !== undefined && txCount !== undefined && txCount > 0
+  const balanceColor = !hasBalance ? 'var(--color-text)' : balance >= 0 ? 'var(--color-income)' : 'var(--color-expense)'
 
   return (
     <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '12px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -189,15 +186,23 @@ function AccountCard({ account, onEdit, onArchive, onViewTransactions }: {
       </div>
 
       {/* Balance */}
-      {account.balance != null && (
-        <div>
-          <div style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', marginBottom: '2px' }}>Balance</div>
-          <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--color-text)', fontVariantNumeric: 'tabular-nums' }}>
-            {currencySymbol}{account.balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+      <div>
+        <div style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', marginBottom: '2px' }}>Balance</div>
+        {hasBalance ? (
+          <>
+            <div style={{ fontSize: '20px', fontWeight: 700, color: balanceColor, fontVariantNumeric: 'tabular-nums' }}>
+              {balance! < 0 ? '−' : ''}{currencySymbol}{Math.abs(balance!).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+            <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+              From {txCount} imported transaction{txCount !== 1 ? 's' : ''}
+            </div>
+          </>
+        ) : (
+          <div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>
+            No transactions linked yet
           </div>
-          <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', marginTop: '2px' }}>Manually maintained</div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Notes */}
       {account.notes && (
@@ -228,13 +233,35 @@ interface AccountsTabProps {
 
 export default function AccountsTab({ onViewTransactions }: AccountsTabProps) {
   const [accounts, setAccounts] = useState<Account[]>([])
+  const [balanceMap, setBalanceMap] = useState<Map<string, number>>(new Map())
+  const [txCounts, setTxCounts] = useState<Map<string, number>>(new Map())
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState<{ open: boolean; existing?: Account }>({ open: false })
   const [showArchived, setShowArchived] = useState(false)
 
   async function load() {
-    const { data } = await supabase.from('accounts').select('*').order('created_at')
-    setAccounts(data ?? [])
+    const [{ data: accts }, { data: txns }] = await Promise.all([
+      supabase.from('accounts').select('*').order('created_at'),
+      supabase.from('transactions').select('account_id, type, amount').not('account_id', 'is', null),
+    ])
+    setAccounts(accts ?? [])
+
+    // Calculate balance per account from transactions
+    // income adds to balance, expense reduces it (refunds stored negative so they add back)
+    // card_payment is excluded (it's a transfer)
+    const bMap = new Map<string, number>()
+    const cMap = new Map<string, number>()
+    for (const tx of txns ?? []) {
+      if (!tx.account_id) continue
+      cMap.set(tx.account_id, (cMap.get(tx.account_id) ?? 0) + 1)
+      if (tx.type === 'income') {
+        bMap.set(tx.account_id, (bMap.get(tx.account_id) ?? 0) + tx.amount)
+      } else if (tx.type === 'expense') {
+        bMap.set(tx.account_id, (bMap.get(tx.account_id) ?? 0) - tx.amount)
+      }
+    }
+    setBalanceMap(bMap)
+    setTxCounts(cMap)
     setLoading(false)
   }
 
@@ -282,6 +309,8 @@ export default function AccountsTab({ onViewTransactions }: AccountsTabProps) {
           <AccountCard
             key={account.id}
             account={account}
+            balance={balanceMap.get(account.id)}
+            txCount={txCounts.get(account.id)}
             onEdit={() => setModal({ open: true, existing: account })}
             onArchive={() => handleArchive(account)}
             onViewTransactions={() => onViewTransactions(account.id)}
