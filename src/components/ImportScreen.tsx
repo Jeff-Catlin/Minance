@@ -313,9 +313,9 @@ export default function ImportScreen() {
                       ...s.td,
                       textAlign: 'right',
                       fontVariantNumeric: 'tabular-nums',
-                      color: row.type === 'income' || (row.type === 'expense' && row.amount < 0) ? 'var(--color-income)' : 'var(--color-expense)',
+                      color: ((row.type === 'expense' && row.amount < 0) || (row.type === 'income' && row.amount >= 0)) ? 'var(--color-income)' : 'var(--color-expense)',
                     }}>
-                      {row.type === 'income' || (row.type === 'expense' && row.amount < 0) ? '+' : '−'}${Math.abs(row.amount).toFixed(2)}
+                      {((row.type === 'expense' && row.amount < 0) || (row.type === 'income' && row.amount >= 0)) ? '+' : '−'}${Math.abs(row.amount).toFixed(2)}
                     </td>
                     <td style={s.td}>{row.type}</td>
                     <td style={{

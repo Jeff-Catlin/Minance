@@ -93,10 +93,12 @@ export async function parseFile(file: File): Promise<ParseResult> {
     }
 
     // Sign convention (bank statement style):
-    //   expense type:  negative file value = purchase (stored positive)
-    //                  positive file value = refund/return (stored negative, reduces expense total)
-    //   income / card_payment: use absolute value (type alone determines direction)
-    const amount = type === 'expense' ? -rawN : Math.abs(rawN)
+    //   expense:      negative file value = purchase (stored positive)
+    //                 positive file value = refund/return (stored negative, reduces expense total)
+    //   income:       positive file value = regular income (stored positive)
+    //                 negative file value = income reduction/clawback (stored negative)
+    //   card_payment: sign ignored (neutral transfer)
+    const amount = type === 'expense' ? -rawN : type === 'income' ? rawN : Math.abs(rawN)
 
     rows.push({
       date,

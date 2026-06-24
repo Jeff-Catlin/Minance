@@ -113,6 +113,12 @@ function formatAmount(amount: number) {
   return amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
+// Returns true when a transaction represents money coming IN (shown green with +)
+// expense + amount < 0 → refund    income + amount >= 0 → regular income
+function txIsCredit(type: string, amount: number) {
+  return (type === 'expense' && amount < 0) || (type === 'income' && amount >= 0)
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 interface TransactionRow extends Transaction {
@@ -383,13 +389,11 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
                           fontVariantNumeric: 'tabular-nums',
                           whiteSpace: 'nowrap',
                           fontWeight: 500,
-                          color: t.type === 'income' || (t.type === 'expense' && t.amount < 0)
-                            ? 'var(--color-income)'
-                            : t.type === 'card_payment'
-                              ? 'var(--color-text-muted)'
-                              : 'var(--color-expense)',
+                          color: t.type === 'card_payment'
+                            ? 'var(--color-text-muted)'
+                            : txIsCredit(t.type, t.amount) ? 'var(--color-income)' : 'var(--color-expense)',
                         }}>
-                          {t.type === 'income' || (t.type === 'expense' && t.amount < 0) ? '+' : t.type === 'card_payment' ? '' : '−'}{currencySymbol}{formatAmount(Math.abs(t.amount))}
+                          {t.type === 'card_payment' ? '' : txIsCredit(t.type, t.amount) ? '+' : '−'}{currencySymbol}{formatAmount(Math.abs(t.amount))}
                         </td>
 
                         {/* Category */}
