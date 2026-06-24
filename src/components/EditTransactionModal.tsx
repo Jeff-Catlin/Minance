@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import type { Transaction } from '../types'
+import type { Account, Transaction } from '../types'
 
 interface EditTransactionModalProps {
   transaction: Transaction
@@ -13,7 +13,13 @@ export default function EditTransactionModal({ transaction, onSave, onClose }: E
   const [vendor, setVendor]           = useState(transaction.vendor)
   const [description, setDescription] = useState(transaction.description ?? '')
   const [amount, setAmount]           = useState(String(transaction.amount))
-  const [account, setAccount]         = useState(transaction.account ?? '')
+  const [accountId, setAccountId]     = useState(transaction.account_id ?? '')
+  const [accounts, setAccounts]       = useState<Account[]>([])
+
+  useEffect(() => {
+    supabase.from('accounts').select('*').eq('is_active', true).order('name')
+      .then(({ data }) => setAccounts(data ?? []))
+  }, [])
   const [error, setError]             = useState('')
   const [saving, setSaving]           = useState(false)
 
@@ -28,7 +34,7 @@ export default function EditTransactionModal({ transaction, onSave, onClose }: E
       vendor: vendor.trim(),
       description: description.trim() || null,
       amount: parseFloat(amount),
-      account: account.trim() || null,
+      account_id: accountId || null,
     }).eq('id', transaction.id)
     setSaving(false)
     if (err) { setError(err.message); return }
@@ -79,8 +85,19 @@ export default function EditTransactionModal({ transaction, onSave, onClose }: E
         )}
 
         <label style={labelStyle}>Account <span style={{ fontWeight: 400 }}>(optional)</span></label>
-        <input style={inputStyle} value={account} onChange={e => setAccount(e.target.value)}
-          placeholder="e.g. Chase Sapphire ••••4567" onKeyDown={e => e.key === 'Enter' && handleSave()} />
+        <select style={{ ...inputStyle, cursor: 'pointer' }} value={accountId} onChange={e => setAccountId(e.target.value)}>
+          <option value="">No account</option>
+          {accounts.map(a => (
+            <option key={a.id} value={a.id}>
+              {a.name}{a.last_four ? ` ••••${a.last_four}` : ''}
+            </option>
+          ))}
+        </select>
+        {transaction.account && !accountId && (
+          <p style={{ fontSize: '11px', color: 'var(--color-text-muted)', margin: '4px 0 0 0' }}>
+            Imported as: {transaction.account}
+          </p>
+        )}
 
         {error && (
           <div style={{ marginTop: '12px', fontSize: '13px', padding: '8px 12px', borderRadius: '8px', background: 'rgba(224,107,107,0.1)', color: 'var(--color-expense)', border: '1px solid var(--color-expense)' }}>

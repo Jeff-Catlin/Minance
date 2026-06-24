@@ -6,9 +6,10 @@ import UncategorizedTab from './UncategorizedTab'
 type SubTab = 'all' | 'uncategorized' | 'recurring'
 
 interface DrillDownFilter {
-  categoryId: string
-  from: string
-  to: string
+  categoryId?: string
+  accountId?: string
+  from?: string
+  to?: string
 }
 
 interface TransactionsScreenProps {

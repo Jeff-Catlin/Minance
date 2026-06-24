@@ -4,28 +4,38 @@ import Dashboard from './components/Dashboard'
 import TransactionsScreen from './components/TransactionsScreen'
 import CategoryManager from './components/CategoryManager'
 import SavingsTab from './components/SavingsTab'
+import AccountsTab from './components/AccountsTab'
 import SettingsPage from './components/SettingsPage'
 import './App.css'
 
-type Screen = 'dashboard' | 'transactions' | 'categories' | 'savings' | 'settings'
+type Screen = 'dashboard' | 'transactions' | 'categories' | 'savings' | 'accounts' | 'settings'
 
 const NAV_ITEMS: { key: Exclude<Screen, 'settings'>; label: string }[] = [
   { key: 'dashboard',    label: 'Dashboard' },
   { key: 'transactions', label: 'Transactions' },
   { key: 'categories',   label: 'Categories' },
   { key: 'savings',      label: 'Savings' },
+  { key: 'accounts',     label: 'Accounts' },
 ]
 
 export default function App() {
   const { settings } = useSettings()
   const [screen, setScreen] = useState<Screen>(settings.defaultLanding)
   const [prevScreen, setPrevScreen] = useState<Exclude<Screen, 'settings'>>('dashboard')
-  const [txFilter, setTxFilter] = useState<{ categoryId: string; from: string; to: string } | null>(null)
+  const [txFilter, setTxFilter] = useState<{ categoryId?: string; accountId?: string; from?: string; to?: string } | null>(null)
   const [txFilterKey, setTxFilterKey] = useState(0)
   const [txInitialSubTab, setTxInitialSubTab] = useState<'all' | 'uncategorized' | null>(null)
 
   function handleDrillDown(categoryId: string, from: string, to: string) {
     setTxFilter({ categoryId, from, to })
+    setTxInitialSubTab('all')
+    setTxFilterKey(k => k + 1)
+    setScreen('transactions')
+    setTimeout(() => { setTxFilter(null); setTxInitialSubTab(null) }, 100)
+  }
+
+  function handleAccountDrillDown(accountId: string) {
+    setTxFilter({ accountId })
     setTxInitialSubTab('all')
     setTxFilterKey(k => k + 1)
     setScreen('transactions')
@@ -168,6 +178,7 @@ export default function App() {
         {screen === 'transactions' && <TransactionsScreen initialFilter={txFilter} filterKey={txFilterKey} initialSubTab={txInitialSubTab ?? undefined} />}
         {screen === 'categories'   && <CategoryManager />}
         {screen === 'savings'      && <SavingsTab />}
+        {screen === 'accounts'     && <AccountsTab onViewTransactions={handleAccountDrillDown} />}
         {screen === 'settings'     && <SettingsPage onBack={closeSettings} />}
       </main>
     </div>

@@ -6,6 +6,7 @@ import RowMenu from './RowMenu'
 import EditTransactionModal from './EditTransactionModal'
 import TransactionDetailModal from './TransactionDetailModal'
 import { useSettings } from '../context/SettingsContext'
+import type { Account } from '../types'
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
@@ -127,9 +128,10 @@ interface TransactionRow extends Transaction {
 }
 
 interface DrillDownFilter {
-  categoryId: string
-  from: string
-  to: string
+  categoryId?: string
+  accountId?: string
+  from?: string
+  to?: string
 }
 
 export default function TransactionList({ initialFilter }: { initialFilter?: DrillDownFilter | null }) {
@@ -137,6 +139,8 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
   const [transactions, setTransactions] = useState<TransactionRow[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [splitsMap, setSplitsMap] = useState<Map<string, TransactionSplit[]>>(new Map())
+  const [accounts, setAccounts] = useState<Account[]>([])
+  const [accountsMap, setAccountsMap] = useState<Map<string, Account>>(new Map())
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
   const [expandedSplit, setExpandedSplit] = useState<string | null>(null)
@@ -151,9 +155,10 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
   const [filterType, setFilterType] = useState('')
   const [filterFrom, setFilterFrom] = useState(initialFilter?.from ?? '')
   const [filterTo, setFilterTo] = useState(initialFilter?.to ?? '')
+  const [filterAccount, setFilterAccount] = useState(initialFilter?.accountId ?? '')
 
   async function load() {
-    const [{ data: txns }, { data: cats }, { data: splits }] = await Promise.all([
+    const [{ data: txns }, { data: cats }, { data: splits }, { data: accts }] = await Promise.all([
       supabase
         .from('transactions')
         .select('*')
@@ -165,6 +170,7 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
         .eq('is_archived', false)
         .order('name'),
       supabase.from('transaction_splits').select('*'),
+      supabase.from('accounts').select('*').order('name'),
     ])
 
     const catMap = new Map((cats ?? []).map(c => [c.id, c.name]))
@@ -182,6 +188,10 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
       map.get(sp.transaction_id)!.push(sp)
     }
     setSplitsMap(map)
+
+    const aList = (accts ?? []) as Account[]
+    setAccounts(aList)
+    setAccountsMap(new Map(aList.map(a => [a.id, a])))
     setLoading(false)
   }
 
@@ -245,11 +255,12 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
       if (filterType && t.type !== filterType) return false
       if (filterFrom && t.date < filterFrom) return false
       if (filterTo && t.date > filterTo) return false
+      if (filterAccount && t.account_id !== filterAccount) return false
       return true
     })
-  }, [transactions, search, filterCategory, matchingCategoryIds, filterType, filterFrom, filterTo, splitsMap])
+  }, [transactions, search, filterCategory, matchingCategoryIds, filterType, filterFrom, filterTo, filterAccount, splitsMap])
 
-  const hasFilters = search || filterCategory || filterType || filterFrom || filterTo
+  const hasFilters = search || filterCategory || filterType || filterFrom || filterTo || filterAccount
 
   function clearFilters() {
     setSearch('')
@@ -257,6 +268,7 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
     setFilterType('')
     setFilterFrom('')
     setFilterTo('')
+    setFilterAccount('')
   }
 
   // ── Category dropdown options ──────────────────────────────────────────────
@@ -315,6 +327,17 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
           <option value="income">Income</option>
           <option value="card_payment">Card Payments</option>
         </select>
+
+        {accounts.length > 0 && (
+          <select style={{ ...s.filterSelect, flexShrink: 0 }} value={filterAccount} onChange={e => setFilterAccount(e.target.value)}>
+            <option value="">All accounts</option>
+            {accounts.map(a => (
+              <option key={a.id} value={a.id}>
+                {a.name}{a.last_four ? ` ••••${a.last_four}` : ''}
+              </option>
+            ))}
+          </select>
+        )}
 
         <input
           style={{ ...s.filterInput, width: '118px', flexShrink: 0 }}
@@ -543,6 +566,7 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
       {detailTx && !editingTx && (
         <TransactionDetailModal
           transaction={detailTx}
+          account={detailTx.account_id ? accountsMap.get(detailTx.account_id) : undefined}
           onEdit={() => { setEditingTx(detailTx); setDetailTx(null) }}
           onDeleted={() => { setDetailTx(null); load() }}
           onClose={() => setDetailTx(null)}

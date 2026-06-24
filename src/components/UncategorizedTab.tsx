@@ -6,6 +6,7 @@ import RowMenu from './RowMenu'
 import EditTransactionModal from './EditTransactionModal'
 import TransactionDetailModal from './TransactionDetailModal'
 import { useSettings } from '../context/SettingsContext'
+import type { Account } from '../types'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -120,13 +121,16 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
   const [bulkCategoryId, setBulkCategoryId] = useState('')
   const [saving, setSaving] = useState<string | null>(null)
   const [bulkSaving, setBulkSaving] = useState(false)
+  const [accounts, setAccounts] = useState<Account[]>([])
+  const [accountsMap, setAccountsMap] = useState<Map<string, Account>>(new Map())
+  const [filterAccount, setFilterAccount] = useState('')
   const [splitModal, setSplitModal] = useState<{ tx: Transaction; splits: TransactionSplit[] } | null>(null)
   const [editingTx, setEditingTx] = useState<Transaction | null>(null)
   const [detailTx, setDetailTx] = useState<Transaction | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
 
   async function load() {
-    const [{ data: txns }, { data: cats }] = await Promise.all([
+    const [{ data: txns }, { data: cats }, { data: accts }] = await Promise.all([
       supabase
         .from('transactions')
         .select('*')
@@ -136,12 +140,16 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
         .order('date', { ascending: false })
         .order('created_at', { ascending: false }),
       supabase.from('categories').select('*').eq('is_archived', false).order('name'),
+      supabase.from('accounts').select('*').order('name'),
     ])
     const rows = txns ?? []
     setTransactions(rows)
     setCategories(cats ?? [])
     onCountChange(rows.length)
     setSelected(new Set())
+    const aList = (accts ?? []) as Account[]
+    setAccounts(aList)
+    setAccountsMap(new Map(aList.map(a => [a.id, a])))
     setLoading(false)
   }
 
@@ -228,7 +236,8 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
 
   if (loading) return <p style={{ color: 'var(--color-text-muted)' }}>Loading…</p>
 
-  const allSelected = selected.size === transactions.length && transactions.length > 0
+  const displayed = filterAccount ? transactions.filter(t => t.account_id === filterAccount) : transactions
+  const allSelected = selected.size === displayed.length && displayed.length > 0
 
   return (
     <div>
@@ -241,6 +250,24 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
           {transactions.length} {transactions.length === 1 ? 'transaction' : 'transactions'} remaining
         </span>
       </div>
+
+      {/* Account filter */}
+      {accounts.length > 0 && (
+        <div style={{ marginBottom: '12px' }}>
+          <select
+            style={{ ...s.select, maxWidth: '220px' }}
+            value={filterAccount}
+            onChange={e => setFilterAccount(e.target.value)}
+          >
+            <option value="">All accounts</option>
+            {accounts.map(a => (
+              <option key={a.id} value={a.id}>
+                {a.name}{a.last_four ? ` ••••${a.last_four}` : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* Bulk assign bar */}
       {selected.size > 0 && (
@@ -273,9 +300,9 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
 
       {/* Table */}
       <div style={s.card}>
-        {transactions.length === 0 ? (
+        {displayed.length === 0 ? (
           <div style={s.empty}>
-            All caught up — no uncategorized transactions.
+            {transactions.length === 0 ? 'All caught up — no uncategorized transactions.' : 'No uncategorized transactions for this account.'}
           </div>
         ) : (
           <div style={{ overflowX: 'auto', maxHeight: '600px', overflowY: 'auto' }}>
@@ -299,7 +326,7 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
                 </tr>
               </thead>
               <tbody>
-                {transactions.map(t => (
+                {displayed.map(t => (
                   <tr
                     key={t.id}
                     style={{ background: selected.has(t.id) ? 'rgba(34,195,166,0.04)' : undefined, cursor: 'pointer' }}
@@ -405,6 +432,7 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
       {detailTx && !editingTx && (
         <TransactionDetailModal
           transaction={detailTx}
+          account={detailTx.account_id ? accountsMap.get(detailTx.account_id) : undefined}
           onEdit={() => { setEditingTx(detailTx); setDetailTx(null) }}
           onDeleted={() => { setDetailTx(null); load() }}
           onClose={() => setDetailTx(null)}

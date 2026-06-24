@@ -19,6 +19,19 @@ export interface ParsedRow {
   categoryName: string | null  // display name for preview
 }
 
+export interface Account {
+  id: string
+  name: string
+  institution: string | null
+  type: string
+  last_four: string | null
+  color: string | null
+  balance: number | null
+  notes: string | null
+  is_active: boolean
+  created_at: string
+}
+
 export interface Transaction {
   id: string
   date: string
@@ -27,6 +40,7 @@ export interface Transaction {
   description: string | null
   vendor: string
   account: string | null
+  account_id: string | null
   category_id: string | null
   is_split: boolean
   source: string

@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useSettings } from '../context/SettingsContext'
-import type { Transaction } from '../types'
+import type { Account, Transaction } from '../types'
 
 interface TransactionDetailModalProps {
   transaction: Transaction & { categoryName?: string | null }
+  account?: Account
   onEdit: () => void
   onDeleted: () => void
   onClose: () => void
@@ -19,7 +20,7 @@ function formatAmount(n: number) {
   return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-export default function TransactionDetailModal({ transaction: t, onEdit, onDeleted, onClose }: TransactionDetailModalProps) {
+export default function TransactionDetailModal({ transaction: t, account, onEdit, onDeleted, onClose }: TransactionDetailModalProps) {
   const { currencySymbol } = useSettings()
   const [menuOpen, setMenuOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -110,7 +111,21 @@ export default function TransactionDetailModal({ transaction: t, onEdit, onDelet
         {/* Fields */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 20px' }}>
           {row('Category', t.categoryName ?? (t.is_split ? 'Split — see transactions' : 'Uncategorized'))}
-          {row('Account', t.account)}
+          <div style={{ marginBottom: '14px' }}>
+            <div style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', marginBottom: '3px' }}>Account</div>
+            {account ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: account.color ?? '#A8A29E', flexShrink: 0 }} />
+                <span style={{ fontSize: '14px', color: 'var(--color-text)' }}>
+                  {account.name}{account.last_four ? ` ••••${account.last_four}` : ''}
+                </span>
+              </div>
+            ) : t.account ? (
+              <div style={{ fontSize: '14px', color: 'var(--color-text)' }}>{t.account}</div>
+            ) : (
+              <div style={{ fontSize: '14px', color: 'var(--color-text-muted)' }}>—</div>
+            )}
+          </div>
         </div>
         {row('Description', t.description)}
 

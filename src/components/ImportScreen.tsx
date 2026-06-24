@@ -152,6 +152,7 @@ export default function ImportScreen() {
       type: 'expense' as const,
       description: null,
       account: null,
+      account_id: null,
       is_split: false,
       source: 'import',
     }))
