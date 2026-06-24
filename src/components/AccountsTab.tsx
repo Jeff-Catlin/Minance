@@ -247,17 +247,26 @@ export default function AccountsTab({ onViewTransactions }: AccountsTabProps) {
     setAccounts(accts ?? [])
 
     // Calculate balance per account from transactions
-    // income adds to balance, expense reduces it (refunds stored negative so they add back)
-    // card_payment is excluded (it's a transfer)
+    // income: adds to balance
+    // expense: reduces balance (refunds stored as negative, so they add back)
+    // card_payment: direction depends on account type
+    //   - credit_card account: payment received = money in = reduces debt (positive)
+    //   - bank/other account:  payment sent = money out = reduces balance (negative)
+    const acctMap = new Map((accts ?? []).map(a => [a.id, a]))
     const bMap = new Map<string, number>()
     const cMap = new Map<string, number>()
     for (const tx of txns ?? []) {
       if (!tx.account_id) continue
       cMap.set(tx.account_id, (cMap.get(tx.account_id) ?? 0) + 1)
+      const acctType = acctMap.get(tx.account_id)?.type
       if (tx.type === 'income') {
         bMap.set(tx.account_id, (bMap.get(tx.account_id) ?? 0) + tx.amount)
       } else if (tx.type === 'expense') {
         bMap.set(tx.account_id, (bMap.get(tx.account_id) ?? 0) - tx.amount)
+      } else if (tx.type === 'card_payment') {
+        // credit card: payment in reduces debt (+), bank account: payment out reduces balance (-)
+        const contribution = acctType === 'credit_card' ? tx.amount : -tx.amount
+        bMap.set(tx.account_id, (bMap.get(tx.account_id) ?? 0) + contribution)
       }
     }
     setBalanceMap(bMap)
