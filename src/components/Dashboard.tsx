@@ -195,6 +195,142 @@ const s = {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
+// ── Donut chart ───────────────────────────────────────────────────────────────
+
+const SLICE_COLORS = [
+  '#0E9F8E', '#6366F1', '#F59E0B', '#EF4444',
+  '#8B5CF6', '#EC4899', '#10B981', '#F97316',
+  '#06B6D4', '#84CC16',
+]
+
+type DonutRow = { parentId: string; parentName: string; parentTotal: number; children: { id: string; name: string; total: number }[] }
+
+function DonutChart({ rows, total, sym }: { rows: DonutRow[]; total: number; sym: string }) {
+  const [hovered, setHovered] = useState<string | null>(null)
+
+  if (rows.length === 0 || total === 0) return null
+
+  const SZ = 280, CX = 140, CY = 140, OR = 118, IR = 73
+
+  const fmt  = (n: number) => `${sym}${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  const fmtS = (n: number) => `${sym}${Math.round(n).toLocaleString()}`
+  const trunc = (s: string, max: number) => s.length > max ? s.slice(0, max - 1) + '…' : s
+
+  let angle = -Math.PI / 2
+
+  const slices = rows.map((row, i) => {
+    const pct = row.parentTotal / total
+    const sweep = pct * 2 * Math.PI
+    const start = angle
+    const end   = angle + sweep
+    angle = end
+
+    const mid = (start + end) / 2
+    const large = sweep > Math.PI ? 1 : 0
+
+    const path = [
+      `M ${CX + OR * Math.cos(start)} ${CY + OR * Math.sin(start)}`,
+      `A ${OR} ${OR} 0 ${large} 1 ${CX + OR * Math.cos(end)} ${CY + OR * Math.sin(end)}`,
+      `L ${CX + IR * Math.cos(end)} ${CY + IR * Math.sin(end)}`,
+      `A ${IR} ${IR} 0 ${large} 0 ${CX + IR * Math.cos(start)} ${CY + IR * Math.sin(start)}`,
+      'Z',
+    ].join(' ')
+
+    return {
+      id: row.parentId,
+      name: row.parentName,
+      total: row.parentTotal,
+      children: [...row.children].sort((a, b) => b.total - a.total),
+      color: SLICE_COLORS[i % SLICE_COLORS.length],
+      path, mid, pct,
+    }
+  })
+
+  const active = slices.find(s => s.id === hovered) ?? null
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      <svg width={SZ} height={SZ} style={{ overflow: 'visible' }}>
+        {slices.map(sl => {
+          const isActive = hovered === sl.id
+          const dimmed  = hovered !== null && !isActive
+          const tx = isActive ? Math.cos(sl.mid) * 8 : 0
+          const ty = isActive ? Math.sin(sl.mid) * 8 : 0
+          return (
+            <path
+              key={sl.id}
+              d={sl.path}
+              fill={sl.color}
+              stroke="var(--color-surface)"
+              strokeWidth={2}
+              opacity={dimmed ? 0.3 : 1}
+              transform={`translate(${tx.toFixed(2)}, ${ty.toFixed(2)})`}
+              style={{ cursor: 'pointer', transition: 'opacity 0.15s, transform 0.15s' }}
+              onMouseEnter={() => setHovered(sl.id)}
+              onMouseLeave={() => setHovered(null)}
+            />
+          )
+        })}
+
+        {/* Center — default */}
+        {!active && (
+          <>
+            <text x={CX} y={CY - 7} textAnchor="middle" fontSize={11} fontWeight={500} fill="var(--color-text-muted)" fontFamily="Inter,system-ui,sans-serif">
+              Total Expenses
+            </text>
+            <text x={CX} y={CY + 15} textAnchor="middle" fontSize={21} fontWeight={700} fill="var(--color-expense)" fontFamily="Inter,system-ui,sans-serif">
+              {fmt(total)}
+            </text>
+          </>
+        )}
+
+        {/* Center — hovered */}
+        {active && (
+          <>
+            <text x={CX} y={CY - 30} textAnchor="middle" fontSize={12} fontWeight={700} fill="var(--color-text)" fontFamily="Inter,system-ui,sans-serif">
+              {trunc(active.name, 16)}
+            </text>
+            <text x={CX} y={CY - 12} textAnchor="middle" fontSize={18} fontWeight={700} fill={active.color} fontFamily="Inter,system-ui,sans-serif">
+              {fmt(active.total)}
+            </text>
+            <text x={CX} y={CY - 1} textAnchor="middle" fontSize={9.5} fill="var(--color-text-muted)" fontFamily="Inter,system-ui,sans-serif">
+              {(active.pct * 100).toFixed(1)}% of expenses
+            </text>
+            <line x1={CX - 44} y1={CY + 7} x2={CX + 44} y2={CY + 7} stroke="var(--color-border)" strokeWidth={1} />
+            {active.children.slice(0, 3).map((child, i) => (
+              <g key={child.id}>
+                <text x={CX - 4} y={CY + 22 + i * 16} textAnchor="end" fontSize={9.5} fill="var(--color-text-muted)" fontFamily="Inter,system-ui,sans-serif">
+                  {trunc(child.name, 11)}
+                </text>
+                <text x={CX + 4} y={CY + 22 + i * 16} textAnchor="start" fontSize={9.5} fontWeight={500} fill="var(--color-text)" fontFamily="Inter,system-ui,sans-serif">
+                  {fmtS(child.total)}
+                </text>
+              </g>
+            ))}
+          </>
+        )}
+      </svg>
+
+      {/* Legend */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px 12px', marginTop: '10px', width: '100%' }}>
+        {slices.map(sl => (
+          <div
+            key={sl.id}
+            style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', cursor: 'default', opacity: hovered && hovered !== sl.id ? 0.35 : 1, transition: 'opacity 0.15s' }}
+            onMouseEnter={() => setHovered(sl.id)}
+            onMouseLeave={() => setHovered(null)}
+          >
+            <div style={{ width: '9px', height: '9px', borderRadius: '2px', background: sl.color, flexShrink: 0 }} />
+            <span style={{ color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {sl.name}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ── Drill-down link ───────────────────────────────────────────────────────────
 
 function DrillLink({ name, onClick, stopProp = false }: {
@@ -591,7 +727,14 @@ export default function Dashboard({ onDrillDown }: DashboardProps) {
           {/* Expenses breakdown */}
           <div style={s.card}>
             <p style={s.sectionTitle}>Where your money went</p>
-            {renderTable(expenseRows, totalExpenses, 'var(--color-expense)', false)}
+            <div style={{ display: 'grid', gridTemplateColumns: expenseRows.length > 0 ? '300px 1fr' : '1fr', gap: '32px', alignItems: 'start' }}>
+              {expenseRows.length > 0 && (
+                <DonutChart rows={expenseRows} total={totalExpenses} sym={currencySymbol} />
+              )}
+              <div>
+                {renderTable(expenseRows, totalExpenses, 'var(--color-expense)', false)}
+              </div>
+            </div>
           </div>
 
           {/* Income breakdown */}
