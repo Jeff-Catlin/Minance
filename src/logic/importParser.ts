@@ -97,8 +97,9 @@ export async function parseFile(file: File): Promise<ParseResult> {
     //                 positive file value = refund/return (stored negative, reduces expense total)
     //   income:       positive file value = regular income (stored positive)
     //                 negative file value = income reduction/clawback (stored negative)
-    //   card_payment: sign ignored (neutral transfer)
-    const amount = type === 'expense' ? -rawN : type === 'income' ? rawN : Math.abs(rawN)
+    //   card_payment: sign preserved — positive = money in (credit card receiving payment),
+    //                 negative = money out (bank account sending payment)
+    const amount = type === 'expense' ? -rawN : rawN
 
     rows.push({
       date,

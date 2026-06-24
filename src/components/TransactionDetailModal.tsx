@@ -44,7 +44,7 @@ export default function TransactionDetailModal({ transaction: t, account, splits
 
   const isCredit = (t.type === 'expense' && t.amount < 0) || (t.type === 'income' && t.amount >= 0)
   const amountColor = t.type === 'card_payment' ? 'var(--color-text-muted)' : isCredit ? 'var(--color-income)' : 'var(--color-expense)'
-  const prefix = t.type === 'card_payment' ? '' : isCredit ? '+' : '−'
+  const prefix = t.type === 'card_payment' ? (t.amount < 0 ? '−' : '+') : isCredit ? '+' : '−'
   const canDelete = t.source !== 'sync'
 
   async function handleDelete() {

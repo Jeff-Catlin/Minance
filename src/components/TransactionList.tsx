@@ -421,7 +421,7 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
                             ? 'var(--color-text-muted)'
                             : txIsCredit(t.type, t.amount) ? 'var(--color-income)' : 'var(--color-expense)',
                         }}>
-                          {t.type === 'card_payment' ? '' : txIsCredit(t.type, t.amount) ? '+' : '−'}{currencySymbol}{formatAmount(Math.abs(t.amount))}
+                          {t.type === 'card_payment' ? (t.amount < 0 ? '−' : '+') : txIsCredit(t.type, t.amount) ? '+' : '−'}{currencySymbol}{formatAmount(Math.abs(t.amount))}
                         </td>
 
                         {/* Category */}
