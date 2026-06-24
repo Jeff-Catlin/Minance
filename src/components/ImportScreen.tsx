@@ -216,7 +216,7 @@ export default function ImportScreen() {
         </p>
         <p style={{ ...s.muted, marginTop: '8px' }}>
           <strong>type</strong> accepts <code style={{ fontFamily: 'monospace', background: 'var(--color-border)', padding: '1px 4px', borderRadius: '4px' }}>expense</code>, <code style={{ fontFamily: 'monospace', background: 'var(--color-border)', padding: '1px 4px', borderRadius: '4px' }}>income</code>, or <code style={{ fontFamily: 'monospace', background: 'var(--color-border)', padding: '1px 4px', borderRadius: '4px' }}>card payment</code>.
-          Amount signs are ignored — the type field determines direction.
+          For expenses, a <strong>negative amount</strong> = purchase; a <strong>positive amount</strong> = refund/return (reduces the expense total).
         </p>
       </div>
 
@@ -313,9 +313,9 @@ export default function ImportScreen() {
                       ...s.td,
                       textAlign: 'right',
                       fontVariantNumeric: 'tabular-nums',
-                      color: row.type === 'income' ? 'var(--color-income)' : 'var(--color-expense)',
+                      color: row.type === 'income' || (row.type === 'expense' && row.amount < 0) ? 'var(--color-income)' : 'var(--color-expense)',
                     }}>
-                      ${row.amount.toFixed(2)}
+                      {row.type === 'income' || (row.type === 'expense' && row.amount < 0) ? '+' : '−'}${Math.abs(row.amount).toFixed(2)}
                     </td>
                     <td style={s.td}>{row.type}</td>
                     <td style={{

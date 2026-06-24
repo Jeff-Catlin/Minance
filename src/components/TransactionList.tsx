@@ -383,13 +383,13 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
                           fontVariantNumeric: 'tabular-nums',
                           whiteSpace: 'nowrap',
                           fontWeight: 500,
-                          color: t.type === 'income'
+                          color: t.type === 'income' || (t.type === 'expense' && t.amount < 0)
                             ? 'var(--color-income)'
                             : t.type === 'card_payment'
                               ? 'var(--color-text-muted)'
                               : 'var(--color-expense)',
                         }}>
-                          {t.type === 'income' ? '+' : t.type === 'card_payment' ? '' : '−'}{currencySymbol}{formatAmount(t.amount)}
+                          {t.type === 'income' || (t.type === 'expense' && t.amount < 0) ? '+' : t.type === 'card_payment' ? '' : '−'}{currencySymbol}{formatAmount(Math.abs(t.amount))}
                         </td>
 
                         {/* Category */}

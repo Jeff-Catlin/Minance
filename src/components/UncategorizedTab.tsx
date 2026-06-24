@@ -341,9 +341,9 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
                       fontVariantNumeric: 'tabular-nums',
                       whiteSpace: 'nowrap',
                       fontWeight: 500,
-                      color: t.type === 'income' ? 'var(--color-income)' : 'var(--color-expense)',
+                      color: t.type === 'income' || (t.type === 'expense' && t.amount < 0) ? 'var(--color-income)' : 'var(--color-expense)',
                     }}>
-                      {t.type === 'income' ? '+' : '−'}{currencySymbol}{formatAmount(t.amount)}
+                      {t.type === 'income' || (t.type === 'expense' && t.amount < 0) ? '+' : '−'}{currencySymbol}{formatAmount(Math.abs(t.amount))}
                     </td>
                     <td style={s.td}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
