@@ -14,10 +14,11 @@ interface DrillDownFilter {
 interface TransactionsScreenProps {
   initialFilter?: DrillDownFilter | null
   filterKey?: number
+  initialSubTab?: SubTab
 }
 
-export default function TransactionsScreen({ initialFilter, filterKey = 0 }: TransactionsScreenProps) {
-  const [subTab, setSubTab] = useState<SubTab>(initialFilter ? 'all' : 'all')
+export default function TransactionsScreen({ initialFilter, filterKey = 0, initialSubTab }: TransactionsScreenProps) {
+  const [subTab, setSubTab] = useState<SubTab>(initialSubTab ?? 'all')
   const [uncategorizedCount, setUncategorizedCount] = useState<number | null>(null)
 
   const SUB_TABS: { key: SubTab; label: () => string }[] = [

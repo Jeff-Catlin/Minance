@@ -205,7 +205,14 @@ const SLICE_COLORS = [
 
 type DonutRow = { parentId: string; parentName: string; parentTotal: number; children: { id: string; name: string; total: number }[] }
 
-function DonutChart({ rows, total, sym }: { rows: DonutRow[]; total: number; sym: string }) {
+function DonutChart({ rows, total, uncatAmount, sym, onSliceClick, onUncatClick }: {
+  rows: DonutRow[]
+  total: number
+  uncatAmount?: number
+  sym: string
+  onSliceClick?: (categoryId: string) => void
+  onUncatClick?: () => void
+}) {
   const [hovered, setHovered] = useState<string | null>(null)
 
   if (rows.length === 0 || total === 0) return null
@@ -246,6 +253,24 @@ function DonutChart({ rows, total, sym }: { rows: DonutRow[]; total: number; sym
     }
   })
 
+  // Add uncategorized slice if there are uncategorized expenses
+  if (uncatAmount && uncatAmount > 0) {
+    const pct  = uncatAmount / total
+    const sweep = pct * 2 * Math.PI
+    const start = angle
+    const end   = angle + sweep
+    const mid   = (start + end) / 2
+    const large = sweep > Math.PI ? 1 : 0
+    const path = [
+      `M ${CX + OR * Math.cos(start)} ${CY + OR * Math.sin(start)}`,
+      `A ${OR} ${OR} 0 ${large} 1 ${CX + OR * Math.cos(end)} ${CY + OR * Math.sin(end)}`,
+      `L ${CX + IR * Math.cos(end)} ${CY + IR * Math.sin(end)}`,
+      `A ${IR} ${IR} 0 ${large} 0 ${CX + IR * Math.cos(start)} ${CY + IR * Math.sin(start)}`,
+      'Z',
+    ].join(' ')
+    slices.push({ id: '__uncat__', name: 'Uncategorized', total: uncatAmount, children: [], color: '#A8A29E', path, mid, pct })
+  }
+
   const active = slices.find(s => s.id === hovered) ?? null
 
   return (
@@ -257,18 +282,19 @@ function DonutChart({ rows, total, sym }: { rows: DonutRow[]; total: number; sym
           const tx = isActive ? Math.cos(sl.mid) * 8 : 0
           const ty = isActive ? Math.sin(sl.mid) * 8 : 0
           return (
-            <path
+            <g
               key={sl.id}
-              d={sl.path}
-              fill={sl.color}
-              stroke="var(--color-surface)"
-              strokeWidth={2}
-              opacity={dimmed ? 0.3 : 1}
+              style={{ cursor: onSliceClick ? 'pointer' : 'default', transition: 'opacity 0.15s, transform 0.15s', opacity: dimmed ? 0.3 : 1 }}
               transform={`translate(${tx.toFixed(2)}, ${ty.toFixed(2)})`}
-              style={{ cursor: 'pointer', transition: 'opacity 0.15s, transform 0.15s' }}
               onMouseEnter={() => setHovered(sl.id)}
               onMouseLeave={() => setHovered(null)}
-            />
+              onClick={sl.id === '__uncat__'
+                ? (onUncatClick ? () => onUncatClick() : undefined)
+                : (onSliceClick ? () => onSliceClick(sl.id) : undefined)}
+            >
+              {(sl.id === '__uncat__' ? onUncatClick : onSliceClick) && <title>{`View ${sl.name} transactions`}</title>}
+              <path d={sl.path} fill={sl.color} stroke="var(--color-surface)" strokeWidth={2} />
+            </g>
           )
         })}
 
@@ -316,9 +342,11 @@ function DonutChart({ rows, total, sym }: { rows: DonutRow[]; total: number; sym
         {slices.map(sl => (
           <div
             key={sl.id}
-            style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', cursor: 'default', opacity: hovered && hovered !== sl.id ? 0.35 : 1, transition: 'opacity 0.15s' }}
+            style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', cursor: onSliceClick ? 'pointer' : 'default', opacity: hovered && hovered !== sl.id ? 0.35 : 1, transition: 'opacity 0.15s' }}
             onMouseEnter={() => setHovered(sl.id)}
             onMouseLeave={() => setHovered(null)}
+            onClick={sl.id === '__uncat__' ? (onUncatClick ?? undefined) : (onSliceClick ? () => onSliceClick(sl.id) : undefined)}
+            title={(sl.id === '__uncat__' ? onUncatClick : onSliceClick) ? `View ${sl.name} transactions` : undefined}
           >
             <div style={{ width: '9px', height: '9px', borderRadius: '2px', background: sl.color, flexShrink: 0 }} />
             <span style={{ color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -364,9 +392,10 @@ function DrillLink({ name, onClick, stopProp = false }: {
 
 interface DashboardProps {
   onDrillDown?: (categoryId: string, from: string, to: string) => void
+  onUncatDrillDown?: () => void
 }
 
-export default function Dashboard({ onDrillDown }: DashboardProps) {
+export default function Dashboard({ onDrillDown, onUncatDrillDown }: DashboardProps) {
   const { settings, currencySymbol } = useSettings()
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [splits, setSplits] = useState<TransactionSplit[]>([])
@@ -425,7 +454,7 @@ export default function Dashboard({ onDrillDown }: DashboardProps) {
 
   const catMap = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories])
 
-  const { expenseRows, incomeRows, totalExpenses, totalIncome } = useMemo(() => {
+  const { expenseRows, incomeRows, totalExpenses, totalIncome, uncatExpense } = useMemo(() => {
     const parents = categories.filter(c => c.parent_id === null)
     const childrenOf = (id: string) => categories.filter(c => c.parent_id === id)
 
@@ -729,7 +758,14 @@ export default function Dashboard({ onDrillDown }: DashboardProps) {
             <p style={s.sectionTitle}>Where your money went</p>
             <div style={{ display: 'grid', gridTemplateColumns: expenseRows.length > 0 ? '300px 1fr' : '1fr', gap: '32px', alignItems: 'start' }}>
               {expenseRows.length > 0 && (
-                <DonutChart rows={expenseRows} total={totalExpenses} sym={currencySymbol} />
+                <DonutChart
+                  rows={expenseRows}
+                  total={totalExpenses}
+                  uncatAmount={uncatExpense > 0 ? uncatExpense : undefined}
+                  sym={currencySymbol}
+                  onSliceClick={onDrillDown ? (catId) => onDrillDown(catId, range.from, range.to) : undefined}
+                  onUncatClick={onUncatDrillDown}
+                />
               )}
               <div>
                 {renderTable(expenseRows, totalExpenses, 'var(--color-expense)', false)}

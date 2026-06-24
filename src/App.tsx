@@ -22,13 +22,21 @@ export default function App() {
   const [prevScreen, setPrevScreen] = useState<Exclude<Screen, 'settings'>>('dashboard')
   const [txFilter, setTxFilter] = useState<{ categoryId: string; from: string; to: string } | null>(null)
   const [txFilterKey, setTxFilterKey] = useState(0)
+  const [txInitialSubTab, setTxInitialSubTab] = useState<'all' | 'uncategorized' | null>(null)
 
   function handleDrillDown(categoryId: string, from: string, to: string) {
     setTxFilter({ categoryId, from, to })
+    setTxInitialSubTab('all')
     setTxFilterKey(k => k + 1)
     setScreen('transactions')
-    // Clear after mount so subsequent tab visits start clean
-    setTimeout(() => setTxFilter(null), 100)
+    setTimeout(() => { setTxFilter(null); setTxInitialSubTab(null) }, 100)
+  }
+
+  function handleUncatDrillDown() {
+    setTxInitialSubTab('uncategorized')
+    setTxFilterKey(k => k + 1)
+    setScreen('transactions')
+    setTimeout(() => setTxInitialSubTab(null), 100)
   }
 
   function openSettings() {
@@ -156,8 +164,8 @@ export default function App() {
 
       {/* ── Screen content ── */}
       <main>
-        {screen === 'dashboard'    && <Dashboard onDrillDown={handleDrillDown} />}
-        {screen === 'transactions' && <TransactionsScreen initialFilter={txFilter} filterKey={txFilterKey} />}
+        {screen === 'dashboard'    && <Dashboard onDrillDown={handleDrillDown} onUncatDrillDown={handleUncatDrillDown} />}
+        {screen === 'transactions' && <TransactionsScreen initialFilter={txFilter} filterKey={txFilterKey} initialSubTab={txInitialSubTab ?? undefined} />}
         {screen === 'categories'   && <CategoryManager />}
         {screen === 'savings'      && <SavingsTab />}
         {screen === 'settings'     && <SettingsPage onBack={closeSettings} />}
