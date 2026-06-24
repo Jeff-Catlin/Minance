@@ -264,8 +264,10 @@ export default function AccountsTab({ onViewTransactions }: AccountsTabProps) {
       } else if (tx.type === 'expense') {
         bMap.set(tx.account_id, (bMap.get(tx.account_id) ?? 0) - tx.amount)
       } else if (tx.type === 'card_payment') {
-        // credit card: payment in reduces debt (+), bank account: payment out reduces balance (-)
-        const contribution = acctType === 'credit_card' ? tx.amount : -tx.amount
+        // direction is determined by account type, not by the stored sign
+        // (card payments are always imported as positive amounts)
+        const absAmount = Math.abs(tx.amount)
+        const contribution = acctType === 'credit_card' ? absAmount : -absAmount
         bMap.set(tx.account_id, (bMap.get(tx.account_id) ?? 0) + contribution)
       }
     }
