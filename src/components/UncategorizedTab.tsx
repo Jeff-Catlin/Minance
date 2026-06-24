@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Category, Transaction, TransactionSplit } from '../types'
 import SplitModal from './SplitModal'
+import RowMenu from './RowMenu'
+import EditTransactionModal from './EditTransactionModal'
 import { useSettings } from '../context/SettingsContext'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -118,6 +120,8 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
   const [saving, setSaving] = useState<string | null>(null)
   const [bulkSaving, setBulkSaving] = useState(false)
   const [splitModal, setSplitModal] = useState<{ tx: Transaction; splits: TransactionSplit[] } | null>(null)
+  const [editingTx, setEditingTx] = useState<Transaction | null>(null)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
 
   async function load() {
     const [{ data: txns }, { data: cats }] = await Promise.all([
@@ -201,6 +205,15 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
     setSelected(new Set())
   }
 
+  async function handleDelete(txId: string) {
+    await supabase.from('transaction_splits').delete().eq('transaction_id', txId)
+    await supabase.from('transactions').delete().eq('id', txId)
+    const updated = transactions.filter(t => t.id !== txId)
+    setTransactions(updated)
+    onCountChange(updated.length)
+    setConfirmDeleteId(null)
+  }
+
   async function openSplitModal(tx: Transaction) {
     const { data: splits } = await supabase
       .from('transaction_splits')
@@ -280,6 +293,7 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
                   <th style={s.th}>Description</th>
                   <th style={{ ...s.th, textAlign: 'right' }}>Amount</th>
                   <th style={s.th}>Category</th>
+                  <th style={{ ...s.th, width: '64px' }}></th>
                 </tr>
               </thead>
               <tbody>
@@ -351,6 +365,19 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
                         </button>
                       </div>
                     </td>
+                    <td style={{ ...s.td, width: '64px', padding: '10px 4px' }}>
+                      {confirmDeleteId === t.id ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                          <button onClick={() => handleDelete(t.id)} style={{ fontFamily: 'inherit', fontSize: '10px', padding: '2px 5px', borderRadius: '4px', border: '1px solid var(--color-expense)', background: 'var(--color-expense)', color: '#fff', cursor: 'pointer' }}>✓ Delete</button>
+                          <button onClick={() => setConfirmDeleteId(null)} style={{ fontFamily: 'inherit', fontSize: '10px', padding: '2px 5px', borderRadius: '4px', border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-muted)', cursor: 'pointer' }}>✕ Cancel</button>
+                        </div>
+                      ) : (
+                        <RowMenu items={[
+                          { label: 'Edit transaction', onClick: () => setEditingTx(t) },
+                          ...(t.source !== 'sync' ? [{ label: 'Delete transaction', danger: true, onClick: () => setConfirmDeleteId(t.id) }] : []),
+                        ]} />
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -359,7 +386,6 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
         )}
       </div>
 
-      {/* Split modal */}
       {splitModal && (
         <SplitModal
           transaction={splitModal.tx}
@@ -367,6 +393,14 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
           categories={categories}
           onSave={() => { setSplitModal(null); load() }}
           onClose={() => setSplitModal(null)}
+        />
+      )}
+
+      {editingTx && (
+        <EditTransactionModal
+          transaction={editingTx}
+          onSave={() => { setEditingTx(null); load() }}
+          onClose={() => setEditingTx(null)}
         />
       )}
     </div>

@@ -1,7 +1,9 @@
-import { useState, useEffect, useMemo, Fragment, useRef } from 'react'
+import { useState, useEffect, useMemo, Fragment } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Category, Transaction, TransactionSplit } from '../types'
 import SplitModal from './SplitModal'
+import RowMenu from './RowMenu'
+import EditTransactionModal from './EditTransactionModal'
 import { useSettings } from '../context/SettingsContext'
 
 // ── Styles ────────────────────────────────────────────────────────────────────
@@ -109,151 +111,6 @@ function formatDate(iso: string) {
 
 function formatAmount(amount: number) {
   return amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
-
-// ── Row dots menu ─────────────────────────────────────────────────────────────
-
-function RowMenu({ items }: { items: { label: string; danger?: boolean; onClick: () => void }[] }) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-    function onOutside(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', onOutside)
-    return () => document.removeEventListener('mousedown', onOutside)
-  }, [open])
-
-  return (
-    <div style={{ position: 'relative', display: 'inline-block' }} ref={ref}>
-      <button
-        onClick={() => setOpen(o => !o)}
-        style={{
-          fontFamily: 'inherit', fontSize: '16px', padding: '2px 6px',
-          background: 'transparent', border: 'none', cursor: 'pointer',
-          color: 'var(--color-text-muted)', lineHeight: 1, borderRadius: '4px',
-        }}
-        aria-label="Row actions"
-      >
-        ⋮
-      </button>
-      {open && (
-        <div style={{
-          position: 'absolute', right: 0, top: '100%', marginTop: '2px',
-          background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-          borderRadius: '8px', boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
-          zIndex: 200, minWidth: '160px', overflow: 'hidden',
-        }}>
-          {items.map(item => (
-            <button
-              key={item.label}
-              onClick={() => { setOpen(false); item.onClick() }}
-              style={{
-                display: 'block', width: '100%', textAlign: 'left',
-                padding: '9px 14px', fontSize: '13px', fontFamily: 'inherit',
-                background: 'transparent', border: 'none', cursor: 'pointer',
-                color: item.danger ? 'var(--color-expense)' : 'var(--color-text)',
-              }}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ── Edit modal ────────────────────────────────────────────────────────────────
-
-interface EditModalProps {
-  transaction: TransactionRow
-  onSave: () => void
-  onClose: () => void
-}
-
-function EditTransactionModal({ transaction, onSave, onClose }: EditModalProps) {
-  const [date, setDate]               = useState(transaction.date)
-  const [vendor, setVendor]           = useState(transaction.vendor)
-  const [description, setDescription] = useState(transaction.description ?? '')
-  const [amount, setAmount]           = useState(String(transaction.amount))
-  const [error, setError]             = useState('')
-  const [saving, setSaving]           = useState(false)
-
-  async function handleSave() {
-    if (!vendor.trim())                             { setError('Vendor is required.'); return }
-    if (!date)                                      { setError('Date is required.'); return }
-    if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
-      setError('Please enter a valid amount.'); return
-    }
-    setSaving(true)
-    const { error: err } = await supabase.from('transactions').update({
-      date,
-      vendor: vendor.trim(),
-      description: description.trim() || null,
-      amount: parseFloat(amount),
-    }).eq('id', transaction.id)
-    setSaving(false)
-    if (err) { setError(err.message); return }
-    onSave()
-  }
-
-  const inputStyle: React.CSSProperties = {
-    fontFamily: 'inherit', fontSize: '14px', padding: '8px 12px',
-    borderRadius: '8px', border: '1px solid var(--color-border)',
-    background: 'var(--color-bg)', color: 'var(--color-text)',
-    outline: 'none', width: '100%', boxSizing: 'border-box',
-  }
-  const labelStyle: React.CSSProperties = {
-    display: 'block', fontSize: '13px', fontWeight: 500,
-    color: 'var(--color-text-muted)', marginBottom: '6px', marginTop: '16px',
-  }
-
-  return (
-    <div
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
-      onClick={e => { if (e.target === e.currentTarget) onClose() }}
-    >
-      <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '12px', padding: '28px', width: '400px', maxWidth: '95vw', boxShadow: '0 8px 32px rgba(0,0,0,0.18)' }}>
-        <p style={{ fontSize: '17px', fontWeight: 600, color: 'var(--color-text)', margin: '0 0 4px 0' }}>Edit Transaction</p>
-        <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', margin: '0 0 4px 0' }}>
-          Changes to category and type are made directly in the table.
-        </p>
-
-        <label style={labelStyle}>Date</label>
-        <input style={inputStyle} type="date" value={date} onChange={e => setDate(e.target.value)} />
-
-        <label style={labelStyle}>Vendor</label>
-        <input style={inputStyle} value={vendor} onChange={e => setVendor(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && handleSave()} autoFocus />
-
-        <label style={labelStyle}>Description <span style={{ fontWeight: 400 }}>(optional)</span></label>
-        <input style={inputStyle} value={description} onChange={e => setDescription(e.target.value)}
-          placeholder="Add a description…" onKeyDown={e => e.key === 'Enter' && handleSave()} />
-
-        <label style={labelStyle}>Amount</label>
-        <input style={inputStyle} type="number" min="0.01" step="0.01" value={amount}
-          onChange={e => setAmount(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSave()} />
-
-        {error && (
-          <div style={{ marginTop: '12px', fontSize: '13px', padding: '8px 12px', borderRadius: '8px', background: 'rgba(224,107,107,0.1)', color: 'var(--color-expense)', border: '1px solid var(--color-expense)' }}>
-            {error}
-          </div>
-        )}
-
-        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '20px' }}>
-          <button onClick={onClose} style={{ fontFamily: 'inherit', fontSize: '13px', padding: '6px 16px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-muted)', cursor: 'pointer' }}>
-            Cancel
-          </button>
-          <button onClick={handleSave} disabled={saving} style={{ fontFamily: 'inherit', fontSize: '13px', padding: '6px 16px', borderRadius: '8px', border: '1px solid var(--color-primary-text)', background: 'var(--color-primary-text)', color: '#fff', cursor: 'pointer', fontWeight: 500 }}>
-            {saving ? 'Saving…' : 'Save changes'}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
