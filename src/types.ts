@@ -13,6 +13,7 @@ export interface ParsedRow {
   type: 'expense' | 'income' | 'card_payment'
   description: string | null
   vendor: string
+  account: string | null       // originating account (e.g. "Chase Sapphire ••••4567")
   rawCategory: string | null   // text from the file
   category_id: string | null   // resolved by categorizer
   categoryName: string | null  // display name for preview
@@ -25,6 +26,7 @@ export interface Transaction {
   type: 'expense' | 'income' | 'card_payment'
   description: string | null
   vendor: string
+  account: string | null
   category_id: string | null
   is_split: boolean
   source: string

@@ -106,6 +106,7 @@ export async function parseFile(file: File): Promise<ParseResult> {
       type: type as 'expense' | 'income' | 'card_payment',
       description: row['description'] ? String(row['description']).trim() : null,
       vendor,
+      account: row['account'] ? String(row['account']).trim() : null,
       rawCategory: row['category'] ? String(row['category']).trim() : null,
       category_id: null,
       categoryName: null,

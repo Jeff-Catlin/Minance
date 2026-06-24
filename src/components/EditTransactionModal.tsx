@@ -13,6 +13,7 @@ export default function EditTransactionModal({ transaction, onSave, onClose }: E
   const [vendor, setVendor]           = useState(transaction.vendor)
   const [description, setDescription] = useState(transaction.description ?? '')
   const [amount, setAmount]           = useState(String(transaction.amount))
+  const [account, setAccount]         = useState(transaction.account ?? '')
   const [error, setError]             = useState('')
   const [saving, setSaving]           = useState(false)
 
@@ -27,6 +28,7 @@ export default function EditTransactionModal({ transaction, onSave, onClose }: E
       vendor: vendor.trim(),
       description: description.trim() || null,
       amount: parseFloat(amount),
+      account: account.trim() || null,
     }).eq('id', transaction.id)
     setSaving(false)
     if (err) { setError(err.message); return }
@@ -75,6 +77,10 @@ export default function EditTransactionModal({ transaction, onSave, onClose }: E
             Negative = refund/return · Positive = regular expense
           </p>
         )}
+
+        <label style={labelStyle}>Account <span style={{ fontWeight: 400 }}>(optional)</span></label>
+        <input style={inputStyle} value={account} onChange={e => setAccount(e.target.value)}
+          placeholder="e.g. Chase Sapphire ••••4567" onKeyDown={e => e.key === 'Enter' && handleSave()} />
 
         {error && (
           <div style={{ marginTop: '12px', fontSize: '13px', padding: '8px 12px', borderRadius: '8px', background: 'rgba(224,107,107,0.1)', color: 'var(--color-expense)', border: '1px solid var(--color-expense)' }}>

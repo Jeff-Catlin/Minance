@@ -4,6 +4,7 @@ import type { Category, Transaction, TransactionSplit } from '../types'
 import SplitModal from './SplitModal'
 import RowMenu from './RowMenu'
 import EditTransactionModal from './EditTransactionModal'
+import TransactionDetailModal from './TransactionDetailModal'
 import { useSettings } from '../context/SettingsContext'
 
 // ── Styles ────────────────────────────────────────────────────────────────────
@@ -142,6 +143,7 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
   const [splitModal, setSplitModal] = useState<{ tx: Transaction; splits: TransactionSplit[] } | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [editingTx, setEditingTx] = useState<TransactionRow | null>(null)
+  const [detailTx, setDetailTx] = useState<TransactionRow | null>(null)
 
   // Filters — initialized from drilldown if provided
   const [search, setSearch] = useState('')
@@ -368,7 +370,10 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
 
                   return (
                     <Fragment key={t.id}>
-                      <tr style={{ background: isConfirming ? 'rgba(224,107,107,0.04)' : undefined }}>
+                      <tr
+                        style={{ background: isConfirming ? 'rgba(224,107,107,0.04)' : undefined, cursor: 'pointer' }}
+                        onClick={() => !isConfirming && setDetailTx(t)}
+                      >
                         {/* Date */}
                         <td style={{ ...s.td, whiteSpace: 'nowrap', color: 'var(--color-text-muted)', fontSize: '13px' }}>
                           {formatDate(t.date)}
@@ -397,7 +402,7 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
                         </td>
 
                         {/* Category */}
-                        <td style={s.td}>
+                        <td style={s.td} onClick={e => e.stopPropagation()}>
                           {t.is_split ? (
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                               <button
@@ -458,7 +463,7 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
                         </td>
 
                         {/* Type */}
-                        <td style={s.td}>
+                        <td style={s.td} onClick={e => e.stopPropagation()}>
                           {t.is_split ? (
                             <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
                               {t.type}
@@ -478,7 +483,7 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
                         </td>
 
                         {/* Actions */}
-                        <td style={{ ...s.td, width: '64px', padding: '10px 4px' }}>
+                        <td style={{ ...s.td, width: '64px', padding: '10px 4px' }} onClick={e => e.stopPropagation()}>
                           {isConfirming ? (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                               <button
@@ -534,6 +539,15 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
           </div>
         )}
       </div>
+
+      {detailTx && !editingTx && (
+        <TransactionDetailModal
+          transaction={detailTx}
+          onEdit={() => { setEditingTx(detailTx); setDetailTx(null) }}
+          onDeleted={() => { setDetailTx(null); load() }}
+          onClose={() => setDetailTx(null)}
+        />
+      )}
 
       {editingTx && (
         <EditTransactionModal

@@ -4,6 +4,7 @@ import type { Category, Transaction, TransactionSplit } from '../types'
 import SplitModal from './SplitModal'
 import RowMenu from './RowMenu'
 import EditTransactionModal from './EditTransactionModal'
+import TransactionDetailModal from './TransactionDetailModal'
 import { useSettings } from '../context/SettingsContext'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -121,6 +122,7 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
   const [bulkSaving, setBulkSaving] = useState(false)
   const [splitModal, setSplitModal] = useState<{ tx: Transaction; splits: TransactionSplit[] } | null>(null)
   const [editingTx, setEditingTx] = useState<Transaction | null>(null)
+  const [detailTx, setDetailTx] = useState<Transaction | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
 
   async function load() {
@@ -298,8 +300,12 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
               </thead>
               <tbody>
                 {transactions.map(t => (
-                  <tr key={t.id} style={{ background: selected.has(t.id) ? 'rgba(34,195,166,0.04)' : undefined }}>
-                    <td style={{ ...s.td, width: '36px' }}>
+                  <tr
+                    key={t.id}
+                    style={{ background: selected.has(t.id) ? 'rgba(34,195,166,0.04)' : undefined, cursor: 'pointer' }}
+                    onClick={() => setDetailTx(t)}
+                  >
+                    <td style={{ ...s.td, width: '36px' }} onClick={e => e.stopPropagation()}>
                       <input
                         type="checkbox"
                         checked={selected.has(t.id)}
@@ -345,7 +351,7 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
                     }}>
                       {((t.type === 'expense' && t.amount < 0) || (t.type === 'income' && t.amount >= 0)) ? '+' : '−'}{currencySymbol}{formatAmount(Math.abs(t.amount))}
                     </td>
-                    <td style={s.td}>
+                    <td style={s.td} onClick={e => e.stopPropagation()}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <select
                           style={{ ...s.select, opacity: saving === t.id ? 0.5 : 1 }}
@@ -365,7 +371,7 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
                         </button>
                       </div>
                     </td>
-                    <td style={{ ...s.td, width: '64px', padding: '10px 4px' }}>
+                    <td style={{ ...s.td, width: '64px', padding: '10px 4px' }} onClick={e => e.stopPropagation()}>
                       {confirmDeleteId === t.id ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                           <button onClick={() => handleDelete(t.id)} style={{ fontFamily: 'inherit', fontSize: '10px', padding: '2px 5px', borderRadius: '4px', border: '1px solid var(--color-expense)', background: 'var(--color-expense)', color: '#fff', cursor: 'pointer' }}>✓ Delete</button>
@@ -393,6 +399,15 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
           categories={categories}
           onSave={() => { setSplitModal(null); load() }}
           onClose={() => setSplitModal(null)}
+        />
+      )}
+
+      {detailTx && !editingTx && (
+        <TransactionDetailModal
+          transaction={detailTx}
+          onEdit={() => { setEditingTx(detailTx); setDetailTx(null) }}
+          onDeleted={() => { setDetailTx(null); load() }}
+          onClose={() => setDetailTx(null)}
         />
       )}
 

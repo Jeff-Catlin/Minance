@@ -151,6 +151,7 @@ export default function ImportScreen() {
       amount: 0,
       type: 'expense' as const,
       description: null,
+      account: null,
       is_split: false,
       source: 'import',
     }))
@@ -172,6 +173,7 @@ export default function ImportScreen() {
       type: r.type,
       description: r.description,
       vendor: r.vendor,
+      account: r.account,
       category_id: r.category_id,
       source: 'import',
     }))
@@ -212,7 +214,7 @@ export default function ImportScreen() {
         <p style={s.muted}>Your spreadsheet (.xlsx or .csv) must have these column headers in the first row:</p>
         <p style={{ ...s.muted, fontFamily: 'monospace', marginTop: '8px' }}>
           <strong>Required:</strong> date · amount · type · vendor<br />
-          <strong>Optional:</strong> description · category
+          <strong>Optional:</strong> description · category · account
         </p>
         <p style={{ ...s.muted, marginTop: '8px' }}>
           <strong>type</strong> accepts <code style={{ fontFamily: 'monospace', background: 'var(--color-border)', padding: '1px 4px', borderRadius: '4px' }}>expense</code>, <code style={{ fontFamily: 'monospace', background: 'var(--color-border)', padding: '1px 4px', borderRadius: '4px' }}>income</code>, or <code style={{ fontFamily: 'monospace', background: 'var(--color-border)', padding: '1px 4px', borderRadius: '4px' }}>card payment</code>.
