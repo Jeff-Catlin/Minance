@@ -2,7 +2,27 @@ import { useState, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { parseFile } from '../logic/importParser'
 import { categorizeRows } from '../logic/categorize'
-import type { Category, ParsedRow, Transaction } from '../types'
+import type { Account, Category, ParsedRow, Transaction } from '../types'
+
+function matchAccounts(rows: ParsedRow[], accounts: Account[]): ParsedRow[] {
+  if (!accounts.length) return rows
+  // Build lookup: various text representations → account_id
+  const lookup = new Map<string, { id: string; name: string }>()
+  for (const a of accounts) {
+    const entry = { id: a.id, name: a.name }
+    lookup.set(a.name.toLowerCase(), entry)
+    if (a.last_four) {
+      lookup.set(`${a.name.toLowerCase()} ••••${a.last_four}`, entry)
+      lookup.set(`${a.name.toLowerCase()} ${a.last_four}`, entry)
+      lookup.set(a.last_four, entry)
+    }
+  }
+  return rows.map(row => {
+    if (!row.account || row.account_id) return row
+    const match = lookup.get(row.account.toLowerCase())
+    return match ? { ...row, account_id: match.id, accountName: match.name } : row
+  })
+}
 
 const BATCH_SIZE = 500
 
@@ -138,13 +158,15 @@ export default function ImportScreen() {
       return
     }
 
-    // Fetch categories and existing transactions for categorization
-    const [{ data: cats }, { data: txns }] = await Promise.all([
+    // Fetch categories, existing transactions, and accounts for matching
+    const [{ data: cats }, { data: txns }, { data: accts }] = await Promise.all([
       supabase.from('categories').select('*').eq('is_archived', false),
       supabase.from('transactions').select('id,vendor,category_id,created_at').not('category_id', 'is', null),
+      supabase.from('accounts').select('*').eq('is_active', true),
     ])
 
     const categories: Category[] = cats ?? []
+    const accounts: Account[] = (accts ?? []) as Account[]
     const transactions: Transaction[] = (txns ?? []).map(t => ({
       ...t,
       date: '',
@@ -158,7 +180,8 @@ export default function ImportScreen() {
     }))
 
     const categorized = categorizeRows(result.rows, categories, transactions)
-    setRows(categorized)
+    const withAccounts = matchAccounts(categorized, accounts)
+    setRows(withAccounts)
     setSkipped(result.skipped)
     setParsing(false)
   }
@@ -175,6 +198,7 @@ export default function ImportScreen() {
       description: r.description,
       vendor: r.vendor,
       account: r.account,
+      account_id: r.account_id,
       category_id: r.category_id,
       source: 'import',
     }))
@@ -328,6 +352,7 @@ export default function ImportScreen() {
                   <th style={{ ...s.th, textAlign: 'right' }}>Amount</th>
                   <th style={s.th}>Type</th>
                   <th style={s.th}>Category</th>
+                  <th style={s.th}>Account</th>
                 </tr>
               </thead>
               <tbody>
@@ -351,6 +376,13 @@ export default function ImportScreen() {
                       fontStyle: row.categoryName ? 'normal' : 'italic',
                     }}>
                       {row.categoryName ?? 'Uncategorized'}
+                    </td>
+                    <td style={{
+                      ...s.td,
+                      color: row.accountName ? 'var(--color-text)' : row.account ? 'var(--color-text-muted)' : 'var(--color-text-muted)',
+                      fontStyle: row.accountName ? 'normal' : 'italic',
+                    }}>
+                      {row.accountName ?? (row.account ? `${row.account} (no match)` : '—')}
                     </td>
                   </tr>
                 ))}

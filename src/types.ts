@@ -13,7 +13,9 @@ export interface ParsedRow {
   type: 'expense' | 'income' | 'card_payment'
   description: string | null
   vendor: string
-  account: string | null       // originating account (e.g. "Chase Sapphire ••••4567")
+  account: string | null       // originating account text from file
+  account_id: string | null    // resolved account FK (if matched to accounts table)
+  accountName: string | null   // display name for preview
   rawCategory: string | null   // text from the file
   category_id: string | null   // resolved by categorizer
   categoryName: string | null  // display name for preview
