@@ -468,10 +468,14 @@ export default function SavingsTab() {
   const [addGoalOpen, setAddGoalOpen]     = useState(false)
   const [editGoal, setEditGoal]           = useState<SavingsGoal | null>(null)
   const [addEntryGoal, setAddEntryGoal]   = useState<SavingsGoal | null>(null)
+  const [dragGoalId, setDragGoalId]       = useState<string | null>(null)
+  const [dragOverId, setDragOverId]       = useState<string | null>(null)
 
   async function load() {
     const [{ data: g }, { data: e }, { data: t }, { data: c }] = await Promise.all([
-      supabase.from('savings_goals').select('*').order('created_at'),
+      supabase.from('savings_goals').select('*')
+        .order('sort_order', { ascending: true, nullsFirst: false })
+        .order('created_at', { ascending: true }),
       supabase.from('savings_entries').select('*').order('date', { ascending: false }),
       supabase.from('transactions').select('*').order('date', { ascending: false }),
       supabase.from('categories').select('*').eq('is_archived', false),
@@ -484,6 +488,28 @@ export default function SavingsTab() {
   }
 
   useEffect(() => { load() }, [])
+
+  async function handleDrop(dropId: string) {
+    if (!dragGoalId || dragGoalId === dropId) { setDragGoalId(null); setDragOverId(null); return }
+    const from = goals.findIndex(g => g.id === dragGoalId)
+    const to   = goals.findIndex(g => g.id === dropId)
+    if (from === -1 || to === -1) return
+
+    const reordered = [...goals]
+    const [moved] = reordered.splice(from, 1)
+    reordered.splice(to, 0, moved)
+
+    setGoals(reordered)
+    setDragGoalId(null)
+    setDragOverId(null)
+
+    // Persist new order
+    await Promise.all(
+      reordered.map((g, i) =>
+        supabase.from('savings_goals').update({ sort_order: i + 1 }).eq('id', g.id)
+      )
+    )
+  }
 
   const entriesByGoal = useMemo(() => {
     const m = new Map<string, SavingsEntry[]>()
@@ -553,10 +579,36 @@ export default function SavingsTab() {
               .sort((a, b) => b.date.localeCompare(a.date))
           : []
 
+        const isDragging   = dragGoalId === goal.id
+        const isDragTarget = dragOverId === goal.id && dragGoalId !== goal.id
+
         return (
-          <div key={goal.id} style={s.card}>
+          <div
+            key={goal.id}
+            style={{
+              ...s.card,
+              opacity: isDragging ? 0.45 : 1,
+              border: isDragTarget
+                ? '2px solid var(--color-primary)'
+                : '1px solid var(--color-border)',
+              transition: 'opacity 0.15s, border 0.1s',
+            }}
+            onDragOver={e => { e.preventDefault(); setDragOverId(goal.id) }}
+            onDragLeave={() => setDragOverId(null)}
+            onDrop={() => handleDrop(goal.id)}
+          >
             {/* Goal header */}
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
+              {/* Drag handle */}
+              <div
+                draggable
+                onDragStart={() => setDragGoalId(goal.id)}
+                onDragEnd={() => { setDragGoalId(null); setDragOverId(null) }}
+                style={{ cursor: 'grab', color: 'var(--color-text-muted)', fontSize: '16px', paddingTop: '2px', userSelect: 'none', flexShrink: 0 }}
+                title="Drag to reorder"
+              >
+                ⠿
+              </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '4px' }}>
                   <span style={{ fontSize: '16px', fontWeight: 600, color: 'var(--color-text)' }}>{goal.name}</span>
