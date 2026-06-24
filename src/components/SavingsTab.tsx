@@ -69,7 +69,8 @@ function getDefaultLimit(goalType: string, age: number | null): number | null {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function formatAmount(n: number, sym: string) {
-  return `${sym}${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  const abs = Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  return n < 0 ? `-${sym}${abs}` : `${sym}${abs}`
 }
 
 function formatDate(iso: string) {
@@ -602,7 +603,7 @@ export default function SavingsTab() {
                 }} />
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px' }}>
-                <span style={{ fontSize: '13px', color: 'var(--color-text)', fontWeight: 500 }}>
+                <span style={{ fontSize: '13px', color: total < 0 ? 'var(--color-expense)' : 'var(--color-text)', fontWeight: 500 }}>
                   {formatAmount(total, currencySymbol)} saved
                 </span>
                 <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>
@@ -673,7 +674,7 @@ export default function SavingsTab() {
                                 )}
                               </div>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-                                <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--color-income)', fontVariantNumeric: 'tabular-nums' }}>
+                                <span style={{ fontSize: '13px', fontWeight: 500, color: item.amount < 0 ? 'var(--color-expense)' : 'var(--color-income)', fontVariantNumeric: 'tabular-nums' }}>
                                   {formatAmount(item.amount, currencySymbol)}
                                 </span>
                                 {item.kind === 'manual' && (
