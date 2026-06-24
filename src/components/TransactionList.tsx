@@ -5,6 +5,7 @@ import SplitModal from './SplitModal'
 import RowMenu from './RowMenu'
 import EditTransactionModal from './EditTransactionModal'
 import TransactionDetailModal from './TransactionDetailModal'
+import BulkEditModal from './BulkEditModal'
 import { useSettings } from '../context/SettingsContext'
 import type { Account } from '../types'
 
@@ -148,6 +149,8 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [editingTx, setEditingTx] = useState<TransactionRow | null>(null)
   const [detailTx, setDetailTx] = useState<TransactionRow | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkEditOpen, setBulkEditOpen] = useState(false)
 
   // Filters — initialized from drilldown if provided
   const [search, setSearch] = useState('')
@@ -269,7 +272,26 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
     setFilterFrom('')
     setFilterTo('')
     setFilterAccount('')
+    setSelectedIds(new Set())
   }
+
+  function toggleSelect(id: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  function toggleSelectAll() {
+    if (selectedIds.size === filtered.length && filtered.length > 0) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(filtered.map(t => t.id)))
+    }
+  }
+
+  const allSelected = filtered.length > 0 && selectedIds.size === filtered.length
 
   // ── Category dropdown options ──────────────────────────────────────────────
 
@@ -360,6 +382,27 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
         )}
       </div>
 
+      {/* Bulk edit banner */}
+      {selectedIds.size > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 16px', background: 'rgba(34,195,166,0.06)', border: '1px solid rgba(34,195,166,0.25)', borderRadius: '10px', marginBottom: '12px', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--color-text)' }}>
+            {selectedIds.size} selected
+          </span>
+          <button
+            onClick={() => setBulkEditOpen(true)}
+            style={{ fontFamily: 'inherit', fontSize: '13px', fontWeight: 500, padding: '5px 14px', borderRadius: '8px', border: 'none', background: 'var(--color-primary-text)', color: '#fff', cursor: 'pointer' }}
+          >
+            Bulk Edit
+          </button>
+          <button
+            onClick={() => setSelectedIds(new Set())}
+            style={{ fontFamily: 'inherit', fontSize: '12px', padding: '5px 12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-muted)', cursor: 'pointer' }}
+          >
+            Clear selection
+          </button>
+        </div>
+      )}
+
       {/* Table */}
       <div style={s.card}>
         {transactions.length === 0 ? (
@@ -375,6 +418,9 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
             <table style={s.table}>
               <thead>
                 <tr>
+                  <th style={{ ...s.th, width: '36px' }}>
+                    <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} style={{ cursor: 'pointer' }} />
+                  </th>
                   <th style={s.th}>Date</th>
                   <th style={s.th}>Vendor</th>
                   <th style={s.th}>Description</th>
@@ -394,9 +440,14 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
                   return (
                     <Fragment key={t.id}>
                       <tr
-                        style={{ background: isConfirming ? 'rgba(224,107,107,0.04)' : undefined, cursor: 'pointer' }}
+                        style={{ background: isConfirming ? 'rgba(224,107,107,0.04)' : selectedIds.has(t.id) ? 'rgba(34,195,166,0.04)' : undefined, cursor: 'pointer' }}
                         onClick={() => !isConfirming && setDetailTx(t)}
                       >
+                        {/* Checkbox */}
+                        <td style={{ ...s.td, width: '36px' }} onClick={e => e.stopPropagation()}>
+                          <input type="checkbox" checked={selectedIds.has(t.id)} onChange={() => toggleSelect(t.id)} style={{ cursor: 'pointer' }} />
+                        </td>
+
                         {/* Date */}
                         <td style={{ ...s.td, whiteSpace: 'nowrap', color: 'var(--color-text-muted)', fontSize: '13px' }}>
                           {formatDate(t.date)}
@@ -536,7 +587,7 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
                       {/* Split detail row */}
                       {t.is_split && isExpanded && (
                         <tr>
-                          <td colSpan={7} style={{ padding: '0 14px 12px 28px', background: 'var(--color-bg)' }}>
+                          <td colSpan={8} style={{ padding: '0 14px 12px 28px', background: 'var(--color-bg)' }}>
                             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                               <tbody>
                                 {txSplits.map(sp => (
@@ -562,6 +613,16 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
           </div>
         )}
       </div>
+
+      {bulkEditOpen && (
+        <BulkEditModal
+          selectedIds={[...selectedIds]}
+          categories={categories}
+          accounts={accounts}
+          onSave={() => { setBulkEditOpen(false); setSelectedIds(new Set()); load() }}
+          onClose={() => setBulkEditOpen(false)}
+        />
+      )}
 
       {detailTx && !editingTx && (
         <TransactionDetailModal
