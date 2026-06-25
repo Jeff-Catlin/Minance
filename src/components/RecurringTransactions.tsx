@@ -677,25 +677,25 @@ export default function RecurringTransactions() {
                   }}
                 >
                   {/* Main row */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', padding: '10px 14px' }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--color-text)' }}>{sg.vendor}</div>
                       <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '2px' }}>
-                        {cat?.name ?? 'Uncategorized'} · {sg.occurrences} occurrences · ~{currencySymbol}{formatAmount(sg.recentAmount)}
+                        {cat?.name ?? 'Uncategorized'}
                       </div>
+                      <button
+                        onClick={() => setExpandedSuggestions(prev => {
+                          const next = new Set(prev)
+                          next.has(sgKey) ? next.delete(sgKey) : next.add(sgKey)
+                          return next
+                        })}
+                        style={{ fontFamily: 'inherit', fontSize: '12px', color: 'var(--color-text-muted)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px 0 0', display: 'block' }}
+                      >
+                        {isOpen ? '▲' : '▼'} {sg.occurrences} occurrences · ~{currencySymbol}{formatAmount(sg.recentAmount)}
+                      </button>
                     </div>
-                    <span style={s.cadenceBadge(sg.cadence)}>{CADENCE_LABELS[sg.cadence]}</span>
-                    <button
-                      onClick={() => setExpandedSuggestions(prev => {
-                        const next = new Set(prev)
-                        next.has(sgKey) ? next.delete(sgKey) : next.add(sgKey)
-                        return next
-                      })}
-                      style={{ fontFamily: 'inherit', fontSize: '11px', color: 'var(--color-text-muted)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '0 2px' }}
-                    >
-                      {isOpen ? '▲' : '▼'}
-                    </button>
-                    <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0, paddingTop: '2px' }}>
+                      <span style={s.cadenceBadge(sg.cadence)}>{CADENCE_LABELS[sg.cadence]}</span>
                       <button style={s.btn('confirm')} onClick={() => handleConfirm(sg)}>Confirm</button>
                       <button style={s.btn('dismiss')} onClick={() => handleDismiss(sg)}>Dismiss</button>
                     </div>
