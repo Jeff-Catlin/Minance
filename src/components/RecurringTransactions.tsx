@@ -77,10 +77,16 @@ const CADENCE_COLORS: Record<Cadence, string> = {
   annually: '#EF4444',
 }
 
+const CADENCE_ORDER: Record<Cadence, number> = {
+  weekly: 0, biweekly: 1, monthly: 2, quarterly: 3, biannually: 4, annually: 5,
+}
+
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December']
+
+const DAY_NAMES_PLURAL = ['Sundays', 'Mondays', 'Tuesdays', 'Wednesdays', 'Thursdays', 'Fridays', 'Saturdays']
 
 function ordinal(n: number): string {
   const s = ['th', 'st', 'nd', 'rd']
@@ -88,8 +94,37 @@ function ordinal(n: number): string {
   return n + (s[(v - 20) % 10] || s[v] || s[0])
 }
 
-function formatExpectedDate(cadence: Cadence, day: number | null, month: number | null): string | null {
-  if (cadence === 'weekly' || cadence === 'biweekly') return null
+function detectDayOfWeek(txns: Transaction[]): string | null {
+  if (txns.length === 0) return null
+  const counts = new Array(7).fill(0)
+  for (const t of txns) counts[new Date(t.date + 'T12:00:00').getDay()]++
+  return DAY_NAMES_PLURAL[counts.indexOf(Math.max(...counts))]
+}
+
+// Cadence-aware representative amount:
+// Low CV (<15%) = flat-rate subscription → recent N transactions to capture price drift
+// High CV (≥15%) = variable (utilities) → 12-month rolling average
+function computeSmartAmount(txns: Transaction[], cadence: Cadence): number {
+  if (txns.length === 0) return 0
+  const sorted = [...txns].sort((a, b) => b.date.localeCompare(a.date))
+  const amounts = sorted.map(t => t.amount)
+  const avg = amounts.reduce((s, a) => s + a, 0) / amounts.length
+  if (amounts.length === 1) return amounts[0]
+  const stdDev = Math.sqrt(amounts.map(a => Math.pow(a - avg, 2)).reduce((s, v) => s + v, 0) / amounts.length)
+  const cv = avg > 0 ? stdDev / avg : 0
+  if (cv < 0.15) {
+    const n = (cadence === 'weekly' || cadence === 'biweekly') ? Math.min(10, sorted.length)
+      : cadence === 'monthly' ? Math.min(3, sorted.length)
+      : Math.min(2, sorted.length)
+    return sorted.slice(0, n).reduce((s, t) => s + t.amount, 0) / n
+  }
+  const cutoff = new Date(); cutoff.setFullYear(cutoff.getFullYear() - 1)
+  const recent = sorted.filter(t => t.date >= cutoff.toISOString().slice(0, 10))
+  return recent.length > 0 ? recent.reduce((s, t) => s + t.amount, 0) / recent.length : avg
+}
+
+function formatExpectedDate(cadence: Cadence, day: number | null, month: number | null, dayOfWeek?: string | null): string | null {
+  if (cadence === 'weekly' || cadence === 'biweekly') return dayOfWeek ? `Expected on ${dayOfWeek}` : null
   if (!day) return null
   if (cadence === 'monthly') return `Expected around the ${ordinal(day)}`
   if (month) return `Expected around ${MONTH_NAMES[month - 1]} ${ordinal(day)}`
@@ -118,8 +153,10 @@ function detectCadence(gaps: number[]): Cadence | null {
   for (const cadence of ['weekly', 'biweekly', 'monthly', 'quarterly', 'biannually', 'annually'] as Cadence[]) {
     const target = CADENCE_TARGET_DAYS[cadence]
     const tol = CADENCE_TOLERANCE[cadence]
-    if (Math.abs(avg - target) <= tol && gaps.every(g => Math.abs(g - target) <= tol * 2)) {
-      return cadence
+    if (Math.abs(avg - target) <= tol) {
+      // Allow up to 25% of gaps to be off-cycle (e.g. one-off charge from same vendor)
+      const conforming = gaps.filter(g => Math.abs(g - target) <= tol * 2).length
+      if (conforming >= Math.max(1, Math.ceil(gaps.length * 0.75))) return cadence
     }
   }
   return null
@@ -160,7 +197,7 @@ function detectPatterns(
       category_id: catId === '' ? null : catId,
       cadence,
       occurrences: txns.length,
-      avgAmount: sorted.reduce((s, t) => s + t.amount, 0) / sorted.length,
+      avgAmount: computeSmartAmount(sorted, cadence),
     })
   }
 
@@ -342,12 +379,12 @@ function BarChart({ data, sym }: { data: BarPoint[]; sym: string }) {
         })}
       </svg>
 
-      {/* Hover tooltip */}
+      {/* Hover tooltip — pinned to the right of the chart so it never overlaps bars */}
       {hoveredBar && hovered !== null && (
         <div style={{
           position: 'absolute',
-          bottom: 'calc(100% - 80px)',
-          left: Math.max(0, Math.min(hovered * (BAR_W + GAP) + BAR_W / 2 - 80, totalW - 170)),
+          top: 0,
+          right: 0,
           background: 'var(--color-surface)',
           border: '1px solid var(--color-border)',
           borderRadius: '8px',
@@ -355,7 +392,7 @@ function BarChart({ data, sym }: { data: BarPoint[]; sym: string }) {
           boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
           zIndex: 100,
           minWidth: '160px',
-          maxWidth: '200px',
+          maxWidth: '220px',
           pointerEvents: 'none',
         }}>
           <div style={{ fontWeight: 600, fontSize: '12px', color: 'var(--color-text)', marginBottom: hoveredBar.breakdown.length > 0 ? '6px' : 0 }}>
@@ -654,6 +691,7 @@ export default function RecurringTransactions() {
   const [showAddModal, setShowAddModal] = useState(false)
   const [confirmingKey, setConfirmingKey] = useState<string | null>(null)
   const [confirmErrors, setConfirmErrors] = useState<Map<string, string>>(new Map())
+  const [cadenceFilter, setCadenceFilter] = useState<Cadence | ''>('')
   const [detailTx, setDetailTx] = useState<(Transaction & { categoryName?: string | null }) | null>(null)
   const [editingTx, setEditingTx] = useState<Transaction | null>(null)
 
@@ -710,6 +748,26 @@ export default function RecurringTransactions() {
   const [showAllEntries, setShowAllEntries] = useState<Set<string>>(new Set())
   const ENTRY_LIMIT = 10
 
+  const recurringSmartAmounts = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const entry of recurring) {
+      const txns = transactions.filter(t => t.vendor === entry.vendor && t.category_id === entry.category_id)
+      map.set(`${entry.vendor}|||${entry.category_id ?? ''}`, computeSmartAmount(txns, entry.cadence))
+    }
+    return map
+  }, [recurring, transactions])
+
+  const displayedRecurring = useMemo(() => {
+    const base = cadenceFilter ? recurring.filter(r => r.cadence === cadenceFilter) : recurring
+    return [...base].sort((a, b) => {
+      const cadenceDiff = CADENCE_ORDER[a.cadence] - CADENCE_ORDER[b.cadence]
+      if (cadenceDiff !== 0) return cadenceDiff
+      const aAmt = recurringSmartAmounts.get(`${a.vendor}|||${a.category_id ?? ''}`) ?? 0
+      const bAmt = recurringSmartAmounts.get(`${b.vendor}|||${b.category_id ?? ''}`) ?? 0
+      return bAmt - aAmt
+    })
+  }, [cadenceFilter, recurring, recurringSmartAmounts])
+
   function getEntryTransactions(entry: RecurringEntry): Transaction[] {
     return transactions
       .filter(t => t.vendor === entry.vendor && t.category_id === entry.category_id)
@@ -761,7 +819,10 @@ export default function RecurringTransactions() {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
         <h2 style={s.heading}>Recurring Transactions</h2>
-        <button style={s.btn('primary')} onClick={() => setShowAddModal(true)}>+ Add Recurring</button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button style={s.btn('ghost')} onClick={() => { setLoading(true); load() }}>↻ Query Transactions</button>
+          <button style={s.btn('primary')} onClick={() => setShowAddModal(true)}>+ Add Recurring</button>
+        </div>
       </div>
 
       {/* ── Suggestions ── */}
@@ -782,6 +843,7 @@ export default function RecurringTransactions() {
                 .filter(t => t.vendor === sg.vendor && t.category_id === sg.category_id)
                 .sort((a, b) => b.date.localeCompare(a.date))
               const visible = showingAll ? sgTxns : sgTxns.slice(0, LIMIT)
+              const sgDayOfWeek = (sg.cadence === 'weekly' || sg.cadence === 'biweekly') ? detectDayOfWeek(sgTxns) : null
 
               const isConfirming = confirmingKey === sgKey
               const confirmErr = confirmErrors.get(sgKey)
@@ -799,9 +861,15 @@ export default function RecurringTransactions() {
                   {/* Main row */}
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', padding: '10px 14px' }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--color-text)' }}>{sg.vendor}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                        <span style={{ fontWeight: 600, fontSize: '14px', color: 'var(--color-text)' }}>{sg.vendor}</span>
+                        <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--color-primary-text)', fontVariantNumeric: 'tabular-nums' }}>
+                          ~{currencySymbol}{formatAmount(sg.avgAmount)}
+                        </span>
+                      </div>
                       <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '2px' }}>
                         {cat?.name ?? 'Uncategorized'}
+                        {sgDayOfWeek && <span style={{ marginLeft: '6px', color: 'var(--color-primary-text)' }}>· Expected on {sgDayOfWeek}</span>}
                       </div>
                       <button
                         onClick={() => setExpandedSuggestions(prev => {
@@ -811,7 +879,7 @@ export default function RecurringTransactions() {
                         })}
                         style={{ fontFamily: 'inherit', fontSize: '12px', color: 'var(--color-text-muted)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px 0 0', display: 'block' }}
                       >
-                        {isOpen ? '▲' : '▼'} {sg.occurrences} occurrences · ~{currencySymbol}{formatAmount(sg.avgAmount)}
+                        {isOpen ? '▲' : '▼'} {sg.occurrences} occurrences
                       </button>
                       {confirmErr && (
                         <div style={{ marginTop: '6px', fontSize: '12px', color: 'var(--color-expense)', padding: '4px 8px', borderRadius: '6px', background: 'rgba(224,107,107,0.08)', border: '1px solid rgba(224,107,107,0.3)' }}>
@@ -903,19 +971,41 @@ export default function RecurringTransactions() {
       </div>
 
       {/* ── Confirmed recurring list ── */}
-      <p style={{ ...s.sectionTitle, marginBottom: '12px' }}>Confirmed Recurring</p>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+        <p style={{ ...s.sectionTitle, margin: 0 }}>Confirmed Recurring</p>
+        {recurring.length > 0 && (
+          <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+            <button style={s.toggleBtn(cadenceFilter === '')} onClick={() => setCadenceFilter('')}>All</button>
+            {([...new Set(recurring.map(r => r.cadence))] as Cadence[])
+              .sort((a, b) => CADENCE_ORDER[a] - CADENCE_ORDER[b])
+              .map(c => (
+                <button key={c} style={s.toggleBtn(cadenceFilter === c)} onClick={() => setCadenceFilter(c)}>
+                  {CADENCE_LABELS[c]}
+                </button>
+              ))}
+          </div>
+        )}
+      </div>
 
       {recurring.length === 0 ? (
         <div style={{ ...s.card, color: 'var(--color-text-muted)', fontSize: '14px' }}>
           Nothing here yet — confirm a suggestion above or add one manually.
         </div>
+      ) : displayedRecurring.length === 0 ? (
+        <div style={{ ...s.card, color: 'var(--color-text-muted)', fontSize: '14px' }}>
+          No {CADENCE_LABELS[cadenceFilter as Cadence]} recurring entries.
+        </div>
       ) : (
-        recurring.map(entry => {
+        displayedRecurring.map(entry => {
           const cat = entry.category_id ? catMap.get(entry.category_id) : null
           const isExpanded   = expandedId === entry.id
           const allEntryTxns = isExpanded ? getEntryTransactions(entry) : []
           const showingAll   = showAllEntries.has(entry.id)
           const visibleTxns  = showingAll ? allEntryTxns : allEntryTxns.slice(0, ENTRY_LIMIT)
+          const entrySmartAmt = recurringSmartAmounts.get(`${entry.vendor}|||${entry.category_id ?? ''}`) ?? 0
+          const entryDayOfWeek = (entry.cadence === 'weekly' || entry.cadence === 'biweekly')
+            ? detectDayOfWeek(transactions.filter(t => t.vendor === entry.vendor && t.category_id === entry.category_id))
+            : null
 
           return (
             <div key={entry.id} style={s.card}>
@@ -932,14 +1022,19 @@ export default function RecurringTransactions() {
                   </div>
                   <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '3px' }}>
                     {cat?.name ?? 'Uncategorized'}
-                    {formatExpectedDate(entry.cadence, entry.expected_day, entry.expected_month) && (
+                    {formatExpectedDate(entry.cadence, entry.expected_day, entry.expected_month, entryDayOfWeek) && (
                       <span style={{ marginLeft: '8px', color: 'var(--color-primary-text)' }}>
-                        · {formatExpectedDate(entry.cadence, entry.expected_day, entry.expected_month)}
+                        · {formatExpectedDate(entry.cadence, entry.expected_day, entry.expected_month, entryDayOfWeek)}
                       </span>
                     )}
                   </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+                  {entrySmartAmt > 0 && (
+                    <span style={{ fontSize: '15px', fontWeight: 600, color: 'var(--color-text)', fontVariantNumeric: 'tabular-nums' }}>
+                      {currencySymbol}{formatAmount(entrySmartAmt)}
+                    </span>
+                  )}
                   <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>
                     {isExpanded ? '▲' : '▼'}
                   </span>
