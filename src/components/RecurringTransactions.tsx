@@ -7,7 +7,7 @@ import EditTransactionModal from './EditTransactionModal'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type Cadence = 'monthly' | 'quarterly' | 'biannually' | 'annually'
+type Cadence = 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'biannually' | 'annually'
 type GraphMode = 'historical' | 'forecast'
 type GraphFilter = 'all' | 'monthly'
 type GraphRange = 1 | 3 | 6 | 12 | 'ytd'
@@ -33,6 +33,8 @@ interface Suggestion {
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const CADENCE_LABELS: Record<Cadence, string> = {
+  weekly: 'Weekly',
+  biweekly: 'Biweekly',
   monthly: 'Monthly',
   quarterly: 'Quarterly',
   biannually: 'Biannually',
@@ -40,6 +42,8 @@ const CADENCE_LABELS: Record<Cadence, string> = {
 }
 
 const CADENCE_MONTHS: Record<Cadence, number> = {
+  weekly: 0,    // day-based — handled separately in forecast
+  biweekly: 0,  // day-based — handled separately in forecast
   monthly: 1,
   quarterly: 3,
   biannually: 6,
@@ -47,6 +51,8 @@ const CADENCE_MONTHS: Record<Cadence, number> = {
 }
 
 const CADENCE_TARGET_DAYS: Record<Cadence, number> = {
+  weekly: 7,
+  biweekly: 14,
   monthly: 30,
   quarterly: 91,
   biannually: 182,
@@ -54,6 +60,8 @@ const CADENCE_TARGET_DAYS: Record<Cadence, number> = {
 }
 
 const CADENCE_TOLERANCE: Record<Cadence, number> = {
+  weekly: 1,
+  biweekly: 2,
   monthly: 5,
   quarterly: 10,
   biannually: 15,
@@ -61,6 +69,8 @@ const CADENCE_TOLERANCE: Record<Cadence, number> = {
 }
 
 const CADENCE_COLORS: Record<Cadence, string> = {
+  weekly: '#10B981',
+  biweekly: '#06B6D4',
   monthly: 'var(--color-primary-text)',
   quarterly: '#8B5CF6',
   biannually: '#F59E0B',
@@ -79,6 +89,7 @@ function ordinal(n: number): string {
 }
 
 function formatExpectedDate(cadence: Cadence, day: number | null, month: number | null): string | null {
+  if (cadence === 'weekly' || cadence === 'biweekly') return null
   if (!day) return null
   if (cadence === 'monthly') return `Expected around the ${ordinal(day)}`
   if (month) return `Expected around ${MONTH_NAMES[month - 1]} ${ordinal(day)}`
@@ -89,6 +100,7 @@ function detectExpectedDate(
   txns: Transaction[],
   cadence: Cadence,
 ): { expected_day: number | null; expected_month: number | null } {
+  if (cadence === 'weekly' || cadence === 'biweekly') return { expected_day: null, expected_month: null }
   if (txns.length === 0) return { expected_day: null, expected_month: null }
   const sorted = [...txns].sort((a, b) => a.date.localeCompare(b.date))
   const days = sorted.map(t => new Date(t.date).getDate())
@@ -103,7 +115,7 @@ function detectExpectedDate(
 function detectCadence(gaps: number[]): Cadence | null {
   if (gaps.length === 0) return null
   const avg = gaps.reduce((a, b) => a + b, 0) / gaps.length
-  for (const cadence of ['monthly', 'quarterly', 'biannually', 'annually'] as Cadence[]) {
+  for (const cadence of ['weekly', 'biweekly', 'monthly', 'quarterly', 'biannually', 'annually'] as Cadence[]) {
     const target = CADENCE_TARGET_DAYS[cadence]
     const tol = CADENCE_TOLERANCE[cadence]
     if (Math.abs(avg - target) <= tol && gaps.every(g => Math.abs(g - target) <= tol * 2)) {
@@ -218,17 +230,25 @@ function buildForecastData(
         .sort((a, b) => b.date.localeCompare(a.date))
       if (matches.length === 0) continue
 
-      // Determine if this entry hits the target month based on cadence
+      // Determine how many times this entry hits the target month
       const lastDate = new Date(matches[0].date)
-      const intervalMonths = CADENCE_MONTHS[r.cadence]
-      let hits = false
-      let proj = new Date(lastDate)
-      for (let n = 1; n <= 24; n++) {
-        proj = new Date(proj.getFullYear(), proj.getMonth() + intervalMonths, proj.getDate())
-        if (proj.getFullYear() === year && proj.getMonth() === month) { hits = true; break }
-        if (proj.getFullYear() > year || (proj.getFullYear() === year && proj.getMonth() > month)) break
+      let occurrences = 0
+
+      if (r.cadence === 'weekly' || r.cadence === 'biweekly') {
+        // Day-based: count how many times the interval lands in the target month
+        const intervalDays = r.cadence === 'weekly' ? 7 : 14
+        const daysInMonth = new Date(year, month + 1, 0).getDate()
+        occurrences = Math.round(daysInMonth / intervalDays)
+      } else {
+        const intervalMonths = CADENCE_MONTHS[r.cadence]
+        let proj = new Date(lastDate)
+        for (let n = 1; n <= 24; n++) {
+          proj = new Date(proj.getFullYear(), proj.getMonth() + intervalMonths, proj.getDate())
+          if (proj.getFullYear() === year && proj.getMonth() === month) { occurrences = 1; break }
+          if (proj.getFullYear() > year || (proj.getFullYear() === year && proj.getMonth() > month)) break
+        }
       }
-      if (!hits) continue
+      if (occurrences === 0) continue
 
       // Project amount using variance-aware logic:
       // Coefficient of variation (std dev / mean) tells us if this is flat-fee or seasonal.
@@ -257,7 +277,7 @@ function buildForecastData(
           : avgAll
       }
 
-      breakdown.push({ name: r.vendor, amount: projAmount })
+      breakdown.push({ name: r.vendor, amount: projAmount * occurrences })
     }
 
     breakdown.sort((a, b) => b.amount - a.amount)
@@ -565,34 +585,38 @@ function AddRecurringModal({ categoryOptions, uniqueVendors, onSave, onClose }: 
 
         <label style={s.modalLabel}>Cadence</label>
         <select style={s.select} value={cadence} onChange={e => { setCadence(e.target.value as Cadence); setExpectedMonth('') }}>
+          <option value="weekly">Weekly</option>
+          <option value="biweekly">Biweekly</option>
           <option value="monthly">Monthly</option>
           <option value="quarterly">Quarterly</option>
           <option value="biannually">Biannually</option>
           <option value="annually">Annually</option>
         </select>
 
-        <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
-          <div style={{ flex: 1 }}>
-            <label style={{ ...s.modalLabel, marginTop: 0 }}>Expected day</label>
-            <select style={s.select} value={expectedDay} onChange={e => setExpectedDay(e.target.value)}>
-              <option value="">Not set</option>
-              {Array.from({ length: 31 }, (_, i) => i + 1).map(d => (
-                <option key={d} value={d}>{ordinal(d)}</option>
-              ))}
-            </select>
-          </div>
-          {cadence !== 'monthly' && (
+        {cadence !== 'weekly' && cadence !== 'biweekly' && (
+          <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
             <div style={{ flex: 1 }}>
-              <label style={{ ...s.modalLabel, marginTop: 0 }}>Expected month</label>
-              <select style={s.select} value={expectedMonth} onChange={e => setExpectedMonth(e.target.value)}>
+              <label style={{ ...s.modalLabel, marginTop: 0 }}>Expected day</label>
+              <select style={s.select} value={expectedDay} onChange={e => setExpectedDay(e.target.value)}>
                 <option value="">Not set</option>
-                {MONTH_NAMES.map((m, i) => (
-                  <option key={i + 1} value={i + 1}>{m}</option>
+                {Array.from({ length: 31 }, (_, i) => i + 1).map(d => (
+                  <option key={d} value={d}>{ordinal(d)}</option>
                 ))}
               </select>
             </div>
-          )}
-        </div>
+            {cadence !== 'monthly' && (
+              <div style={{ flex: 1 }}>
+                <label style={{ ...s.modalLabel, marginTop: 0 }}>Expected month</label>
+                <select style={s.select} value={expectedMonth} onChange={e => setExpectedMonth(e.target.value)}>
+                  <option value="">Not set</option>
+                  {MONTH_NAMES.map((m, i) => (
+                    <option key={i + 1} value={i + 1}>{m}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+        )}
 
         {error && (
           <div style={{ marginTop: '12px', fontSize: '13px', padding: '8px 12px', borderRadius: '8px', background: 'rgba(224,107,107,0.1)', color: 'var(--color-expense)', border: '1px solid var(--color-expense)' }}>
