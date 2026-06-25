@@ -274,9 +274,18 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
   // Net financial impact of filtered set (income adds, expense subtracts, signed amounts handled correctly)
   const filteredTotal = hasFilters
     ? filtered.reduce((sum, t) => {
-        if (t.type === 'income') return sum + t.amount
-        if (t.type === 'expense') return sum - t.amount
-        return sum + t.amount // card_payment: already signed correctly in storage
+        // When filtering by a specific category and the transaction is split, only
+        // count the split portion(s) that belong to the filtered category, not the
+        // full transaction amount.
+        let amount = t.amount
+        if (filterCategory && filterCategory !== '__none__' && t.is_split && matchingCategoryIds) {
+          amount = (splitsMap.get(t.id) ?? [])
+            .filter(sp => matchingCategoryIds.has(sp.category_id))
+            .reduce((s, sp) => s + sp.amount, 0)
+        }
+        if (t.type === 'income') return sum + amount
+        if (t.type === 'expense') return sum - amount
+        return sum + amount // card_payment: already signed correctly in storage
       }, 0)
     : 0
 
