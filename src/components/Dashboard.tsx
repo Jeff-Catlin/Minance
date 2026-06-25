@@ -406,29 +406,25 @@ export default function Dashboard({ onDrillDown, onUncatDrillDown }: DashboardPr
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
 
-  const [period, setPeriod] = useState<Period>(settings.defaultPeriod as Period)
+  const [period, setPeriod] = useState<Period | null>(settings.defaultPeriod as Period || null)
   const [relative, setRelative] = useState<Relative>('current')
-  const [customFrom, setCustomFrom] = useState('')
-  const [customTo, setCustomTo] = useState('')
-  const isCustom = period === ('custom' as string)
+  const [dateFrom, setDateFrom] = useState(() => getRange((settings.defaultPeriod as Period) || 'month', 'current').from)
+  const [dateTo, setDateTo] = useState(() => getRange((settings.defaultPeriod as Period) || 'month', 'current').to)
 
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
   // Compute active date range
-  const range = useMemo(() => {
-    if (isCustom) return { from: customFrom, to: customTo }
-    return getRange(period, relative)
-  }, [period, relative, customFrom, customTo, isCustom])
+  const range = useMemo(() => ({ from: dateFrom, to: dateTo }), [dateFrom, dateTo])
 
   const budgetMultiplier = useMemo(() => {
-    if ((isCustom || period === 'ytd') && range.from && range.to) {
+    if (period === 'month') return 1
+    if (period === 'year') return 12
+    if (range.from && range.to) {
       const days = (new Date(range.to).getTime() - new Date(range.from).getTime()) / 86400000 + 1
       return days / 30.44
     }
-    if (period === 'month') return 1
-    if (period === 'year') return 12
     return null
-  }, [period, isCustom, range])
+  }, [period, range])
 
   useEffect(() => {
     async function load() {
@@ -692,11 +688,17 @@ export default function Dashboard({ onDrillDown, onUncatDrillDown }: DashboardPr
 
       {/* Time filter */}
       <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap' }}>
-        {/* Last / Current toggle — only shown when not on custom or YTD */}
-        {!isCustom && period !== 'ytd' && (
+        {/* Last / Current toggle — only shown for period-based selections (not manual dates or YTD) */}
+        {period !== null && period !== 'ytd' && (
           <>
-            <button style={s.presetBtn(relative === 'last')} onClick={() => setRelative('last')}>Last</button>
-            <button style={s.presetBtn(relative === 'current')} onClick={() => setRelative('current')}>Current</button>
+            <button style={s.presetBtn(relative === 'last')} onClick={() => {
+              setRelative('last')
+              if (period) { const r = getRange(period, 'last'); setDateFrom(r.from); setDateTo(r.to) }
+            }}>Last</button>
+            <button style={s.presetBtn(relative === 'current')} onClick={() => {
+              setRelative('current')
+              if (period) { const r = getRange(period, 'current'); setDateFrom(r.from); setDateTo(r.to) }
+            }}>Current</button>
             <div style={{ width: '1px', background: 'var(--color-border)', alignSelf: 'stretch', margin: '0 2px' }} />
           </>
         )}
@@ -705,8 +707,13 @@ export default function Dashboard({ onDrillDown, onUncatDrillDown }: DashboardPr
         {(['week', 'month', 'ytd', 'year'] as Period[]).map(p => (
           <button
             key={p}
-            style={s.presetBtn(!isCustom && period === p)}
-            onClick={() => { setPeriod(p) }}
+            style={s.presetBtn(period === p)}
+            onClick={() => {
+              setPeriod(p)
+              const r = getRange(p, relative)
+              setDateFrom(r.from)
+              setDateTo(r.to)
+            }}
           >
             {p === 'ytd' ? 'YTD' : p.charAt(0).toUpperCase() + p.slice(1)}
           </button>
@@ -714,21 +721,10 @@ export default function Dashboard({ onDrillDown, onUncatDrillDown }: DashboardPr
 
         <div style={{ width: '1px', background: 'var(--color-border)', alignSelf: 'stretch', margin: '0 2px' }} />
 
-        {/* Custom */}
-        <button
-          style={s.presetBtn(isCustom)}
-          onClick={() => setPeriod('custom' as Period)}
-        >
-          Custom
-        </button>
-
-        {isCustom && (
-          <>
-            <input type="date" style={s.dateInput} value={customFrom} onChange={e => setCustomFrom(e.target.value)} />
-            <span style={{ color: 'var(--color-text-muted)', fontSize: '13px' }}>–</span>
-            <input type="date" style={s.dateInput} value={customTo} onChange={e => setCustomTo(e.target.value)} />
-          </>
-        )}
+        {/* Always-visible date range */}
+        <input type="date" style={s.dateInput} value={dateFrom} onChange={e => { setDateFrom(e.target.value); setPeriod(null) }} />
+        <span style={{ color: 'var(--color-text-muted)', fontSize: '13px' }}>–</span>
+        <input type="date" style={s.dateInput} value={dateTo} onChange={e => { setDateTo(e.target.value); setPeriod(null) }} />
       </div>
 
       {loading ? (
