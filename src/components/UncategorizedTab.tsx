@@ -218,16 +218,16 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
   function selectAllByVendor(vendor: string) {
     setSelected(prev => {
       const next = new Set(prev)
-      transactions.filter(t => t.vendor === vendor).forEach(t => next.add(t.id))
+      displayed.filter(t => t.vendor === vendor).forEach(t => next.add(t.id))
       return next
     })
   }
 
   function toggleSelectAll() {
-    if (selected.size === transactions.length) {
+    if (selected.size === displayed.length && displayed.length > 0) {
       setSelected(new Set())
     } else {
-      setSelected(new Set(transactions.map(t => t.id)))
+      setSelected(new Set(displayed.map(t => t.id)))
     }
   }
 
