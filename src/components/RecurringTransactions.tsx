@@ -652,6 +652,8 @@ export default function RecurringTransactions() {
   const [graphFilter, setGraphFilter] = useState<GraphFilter>('all')
   const [graphRange, setGraphRange] = useState<GraphRange>(1)
   const [showAddModal, setShowAddModal] = useState(false)
+  const [confirmingKey, setConfirmingKey] = useState<string | null>(null)
+  const [confirmErrors, setConfirmErrors] = useState<Map<string, string>>(new Map())
   const [detailTx, setDetailTx] = useState<(Transaction & { categoryName?: string | null }) | null>(null)
   const [editingTx, setEditingTx] = useState<Transaction | null>(null)
 
@@ -717,6 +719,10 @@ export default function RecurringTransactions() {
   // ── Actions ──────────────────────────────────────────────────────────────────
 
   async function handleConfirm(sg: Suggestion) {
+    const key = `${sg.vendor}|||${sg.category_id ?? ''}`
+    setConfirmingKey(key)
+    setConfirmErrors(prev => { const m = new Map(prev); m.delete(key); return m })
+
     const matches = transactions.filter(t => t.vendor === sg.vendor && t.category_id === sg.category_id)
     const { expected_day, expected_month } = detectExpectedDate(matches, sg.cadence)
     const { error } = await supabase.from('recurring_transactions').insert({
@@ -726,7 +732,12 @@ export default function RecurringTransactions() {
       expected_day,
       expected_month,
     })
-    if (error) { console.error('Confirm failed:', error.message); return }
+
+    setConfirmingKey(null)
+    if (error) {
+      setConfirmErrors(prev => new Map(prev).set(key, error.message))
+      return
+    }
     load()
   }
 
@@ -772,6 +783,9 @@ export default function RecurringTransactions() {
                 .sort((a, b) => b.date.localeCompare(a.date))
               const visible = showingAll ? sgTxns : sgTxns.slice(0, LIMIT)
 
+              const isConfirming = confirmingKey === sgKey
+              const confirmErr = confirmErrors.get(sgKey)
+
               return (
                 <div
                   key={sgKey}
@@ -799,11 +813,18 @@ export default function RecurringTransactions() {
                       >
                         {isOpen ? '▲' : '▼'} {sg.occurrences} occurrences · ~{currencySymbol}{formatAmount(sg.avgAmount)}
                       </button>
+                      {confirmErr && (
+                        <div style={{ marginTop: '6px', fontSize: '12px', color: 'var(--color-expense)', padding: '4px 8px', borderRadius: '6px', background: 'rgba(224,107,107,0.08)', border: '1px solid rgba(224,107,107,0.3)' }}>
+                          Could not save: {confirmErr}
+                        </div>
+                      )}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0, paddingTop: '2px' }}>
                       <span style={s.cadenceBadge(sg.cadence)}>{CADENCE_LABELS[sg.cadence]}</span>
-                      <button style={s.btn('confirm')} onClick={() => handleConfirm(sg)}>Confirm</button>
-                      <button style={s.btn('dismiss')} onClick={() => handleDismiss(sg)}>Dismiss</button>
+                      <button style={s.btn('confirm')} onClick={() => handleConfirm(sg)} disabled={isConfirming}>
+                        {isConfirming ? 'Saving…' : 'Confirm'}
+                      </button>
+                      <button style={s.btn('dismiss')} onClick={() => handleDismiss(sg)} disabled={isConfirming}>Dismiss</button>
                     </div>
                   </div>
 
