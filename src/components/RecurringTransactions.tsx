@@ -694,6 +694,7 @@ export default function RecurringTransactions() {
   const [cadenceFilter, setCadenceFilter] = useState<Cadence | ''>('')
   const [excludedIds, setExcludedIds] = useState<Set<string>>(new Set())
   const [pendingExclude, setPendingExclude] = useState<string | null>(null)
+  const [excludeError, setExcludeError] = useState<string | null>(null)
   const [detailTx, setDetailTx] = useState<(Transaction & { categoryName?: string | null }) | null>(null)
   const [editingTx, setEditingTx] = useState<Transaction | null>(null)
 
@@ -820,11 +821,14 @@ export default function RecurringTransactions() {
   }
 
   async function handleExclude(txId: string) {
+    setExcludeError(null)
     const { error } = await supabase.from('recurring_exclusions').insert({ transaction_id: txId })
-    if (!error) {
-      setExcludedIds(prev => new Set([...prev, txId]))
-      setPendingExclude(null)
+    if (error) {
+      setExcludeError(error.message)
+      return
     }
+    setExcludedIds(prev => new Set([...prev, txId]))
+    setPendingExclude(null)
   }
 
   // ── Render ───────────────────────────────────────────────────────────────────
@@ -1087,22 +1091,29 @@ export default function RecurringTransactions() {
                               return (
                                 <tr key={t.id} style={{ background: 'rgba(224,107,107,0.04)' }}>
                                   <td colSpan={3} style={{ padding: '7px 8px' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                      <span style={{ flex: 1, fontSize: '12px', color: 'var(--color-text)' }}>
-                                        Remove {formatDate(t.date)} · {currencySymbol}{formatAmount(t.amount)} from this group?
-                                      </span>
-                                      <button
-                                        onClick={() => handleExclude(t.id)}
-                                        style={{ ...s.btn('dismiss'), fontSize: '12px', padding: '3px 10px', borderColor: 'var(--color-expense)', color: 'var(--color-expense)' }}
-                                      >
-                                        Confirm
-                                      </button>
-                                      <button
-                                        onClick={() => setPendingExclude(null)}
-                                        style={{ ...s.btn('ghost'), fontSize: '12px', padding: '3px 10px' }}
-                                      >
-                                        Cancel
-                                      </button>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <span style={{ flex: 1, fontSize: '12px', color: 'var(--color-text)' }}>
+                                          Remove {formatDate(t.date)} · {currencySymbol}{formatAmount(t.amount)} from this group?
+                                        </span>
+                                        <button
+                                          onClick={() => handleExclude(t.id)}
+                                          style={{ ...s.btn('dismiss'), fontSize: '12px', padding: '3px 10px', borderColor: 'var(--color-expense)', color: 'var(--color-expense)' }}
+                                        >
+                                          Confirm
+                                        </button>
+                                        <button
+                                          onClick={() => { setPendingExclude(null); setExcludeError(null) }}
+                                          style={{ ...s.btn('ghost'), fontSize: '12px', padding: '3px 10px' }}
+                                        >
+                                          Cancel
+                                        </button>
+                                      </div>
+                                      {excludeError && (
+                                        <div style={{ fontSize: '11px', color: 'var(--color-expense)', paddingLeft: '2px' }}>
+                                          Error: {excludeError}
+                                        </div>
+                                      )}
                                     </div>
                                   </td>
                                 </tr>
