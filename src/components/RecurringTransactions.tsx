@@ -155,16 +155,17 @@ function detectPatterns(
 
 // ── Graph helpers ─────────────────────────────────────────────────────────────
 
+type BarPoint = { label: string; amount: number; breakdown: { name: string; amount: number }[] }
+
 function buildHistoricalData(
   transactions: Transaction[],
   recurring: RecurringEntry[],
   filter: GraphFilter,
   range: GraphRange,
-): { label: string; amount: number }[] {
+): BarPoint[] {
   const now = new Date()
   const filtered = filter === 'monthly' ? recurring.filter(r => r.cadence === 'monthly') : recurring
-  const keys = new Set(filtered.map(r => `${r.vendor}|||${r.category_id ?? ''}`))
-  const data: { label: string; amount: number }[] = []
+  const data: BarPoint[] = []
 
   for (let i = range - 1; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
@@ -173,10 +174,16 @@ function buildHistoricalData(
     const from = `${y}-${String(m + 1).padStart(2, '0')}-01`
     const to = `${y}-${String(m + 1).padStart(2, '0')}-${String(new Date(y, m + 1, 0).getDate()).padStart(2, '0')}`
     const label = d.toLocaleString('en-US', { month: 'short', year: '2-digit' })
-    const amount = transactions
-      .filter(t => keys.has(`${t.vendor}|||${t.category_id ?? ''}`) && t.date >= from && t.date <= to)
-      .reduce((s, t) => s + t.amount, 0)
-    data.push({ label, amount })
+
+    const breakdown: { name: string; amount: number }[] = []
+    for (const r of filtered) {
+      const amt = transactions
+        .filter(t => t.vendor === r.vendor && t.category_id === r.category_id && t.date >= from && t.date <= to)
+        .reduce((s, t) => s + t.amount, 0)
+      if (amt > 0) breakdown.push({ name: r.vendor, amount: amt })
+    }
+    breakdown.sort((a, b) => b.amount - a.amount)
+    data.push({ label, amount: breakdown.reduce((s, b) => s + b.amount, 0), breakdown })
   }
 
   return data
@@ -187,17 +194,17 @@ function buildForecastData(
   recurring: RecurringEntry[],
   filter: GraphFilter,
   range: GraphRange,
-): { label: string; amount: number }[] {
+): BarPoint[] {
   const now = new Date()
   const filtered = filter === 'monthly' ? recurring.filter(r => r.cadence === 'monthly') : recurring
-  const data: { label: string; amount: number }[] = []
+  const data: BarPoint[] = []
 
   for (let i = 0; i < range; i++) {
     const d = new Date(now.getFullYear(), now.getMonth() + i, 1)
     const year = d.getFullYear()
     const month = d.getMonth()
     const label = d.toLocaleString('en-US', { month: 'short', year: '2-digit' })
-    let amount = 0
+    const breakdown: { name: string; amount: number }[] = []
 
     for (const r of filtered) {
       const matches = transactions
@@ -213,14 +220,15 @@ function buildForecastData(
       for (let n = 1; n <= 24; n++) {
         proj = new Date(proj.getFullYear(), proj.getMonth() + intervalMonths, proj.getDate())
         if (proj.getFullYear() === year && proj.getMonth() === month) {
-          amount += lastAmount
+          breakdown.push({ name: r.vendor, amount: lastAmount })
           break
         }
         if (proj.getFullYear() > year || (proj.getFullYear() === year && proj.getMonth() > month)) break
       }
     }
 
-    data.push({ label, amount })
+    breakdown.sort((a, b) => b.amount - a.amount)
+    data.push({ label, amount: breakdown.reduce((s, b) => s + b.amount, 0), breakdown })
   }
 
   return data
@@ -239,50 +247,82 @@ function formatDate(iso: string) {
 
 // ── Bar Chart ─────────────────────────────────────────────────────────────────
 
-function BarChart({ data }: { data: { label: string; amount: number }[] }) {
-  const { currencySymbol } = useSettings()
+function BarChart({ data, sym }: { data: BarPoint[]; sym: string }) {
+  const [hovered, setHovered] = useState<number | null>(null)
   const max = Math.max(...data.map(d => d.amount), 1)
-  const BAR_H = 100
+  const BAR_H = 110
   const BAR_W = 30
-  const GAP = 10
-  const LABEL_H = 20
+  const GAP = 8
   const totalW = data.length * (BAR_W + GAP) - GAP
+  const hoveredBar = hovered !== null ? data[hovered] : null
 
   return (
-    <div style={{ overflowX: 'auto' }}>
+    <div style={{ position: 'relative', overflowX: 'auto' }}>
       <svg
         width={totalW}
-        height={BAR_H + LABEL_H + 8}
+        height={BAR_H + 24}
         style={{ display: 'block', minWidth: '100%', overflow: 'visible' }}
       >
         {data.map((d, i) => {
           const barH = d.amount > 0 ? Math.max((d.amount / max) * BAR_H, 4) : 0
           const x = i * (BAR_W + GAP)
+          const isHov = hovered === i
           return (
-            <g key={d.label}>
-              <title>{`${d.label}: ${currencySymbol}${formatAmount(d.amount)}`}</title>
+            <g
+              key={d.label}
+              onMouseEnter={() => setHovered(i)}
+              onMouseLeave={() => setHovered(null)}
+              style={{ cursor: 'default' }}
+            >
               <rect
-                x={x}
-                y={BAR_H - barH}
-                width={BAR_W}
-                height={barH > 0 ? barH : 2}
-                fill={barH > 0 ? 'var(--color-expense)' : 'var(--color-border)'}
-                rx={3}
-                opacity={d.amount === 0 ? 0.3 : 1}
+                x={x} y={barH > 0 ? BAR_H - barH : BAR_H - 2}
+                width={BAR_W} height={barH > 0 ? barH : 2}
+                fill={isHov ? 'var(--color-primary-text)' : barH > 0 ? 'var(--color-primary)' : 'var(--color-border)'}
+                rx={3} opacity={d.amount === 0 ? 0.3 : 1}
               />
-              <text
-                x={x + BAR_W / 2}
-                y={BAR_H + LABEL_H}
-                textAnchor="middle"
-                fontSize={9}
-                fill="var(--color-text-muted)"
-              >
+              <text x={x + BAR_W / 2} y={BAR_H + 16} textAnchor="middle" fontSize={9}
+                fill={isHov ? 'var(--color-primary-text)' : 'var(--color-text-muted)'} fontFamily="inherit">
                 {d.label}
               </text>
             </g>
           )
         })}
       </svg>
+
+      {/* Hover tooltip */}
+      {hoveredBar && hovered !== null && (
+        <div style={{
+          position: 'absolute',
+          bottom: 'calc(100% - 80px)',
+          left: Math.max(0, Math.min(hovered * (BAR_W + GAP) + BAR_W / 2 - 80, totalW - 170)),
+          background: 'var(--color-surface)',
+          border: '1px solid var(--color-border)',
+          borderRadius: '8px',
+          padding: '10px 12px',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+          zIndex: 100,
+          minWidth: '160px',
+          maxWidth: '200px',
+          pointerEvents: 'none',
+        }}>
+          <div style={{ fontWeight: 600, fontSize: '12px', color: 'var(--color-text)', marginBottom: hoveredBar.breakdown.length > 0 ? '6px' : 0 }}>
+            {hoveredBar.label}
+            <span style={{ color: 'var(--color-primary-text)', marginLeft: '6px' }}>
+              {sym}{formatAmount(hoveredBar.amount)}
+            </span>
+          </div>
+          {hoveredBar.breakdown.map((item, j) => (
+            <div key={j} style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', marginTop: '3px' }}>
+              <span style={{ fontSize: '11px', color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {item.name}
+              </span>
+              <span style={{ fontSize: '11px', color: 'var(--color-text)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
+                {sym}{formatAmount(item.amount)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -603,10 +643,13 @@ export default function RecurringTransactions() {
     [transactions],
   )
 
-  function getLastThree(entry: RecurringEntry): Transaction[] {
+  const [showAllEntries, setShowAllEntries] = useState<Set<string>>(new Set())
+  const ENTRY_LIMIT = 10
+
+  function getEntryTransactions(entry: RecurringEntry): Transaction[] {
     return transactions
       .filter(t => t.vendor === entry.vendor && t.category_id === entry.category_id)
-      .slice(0, 3)
+      .sort((a, b) => b.date.localeCompare(a.date))
   }
 
   // ── Actions ──────────────────────────────────────────────────────────────────
@@ -772,7 +815,7 @@ export default function RecurringTransactions() {
             No recurring transactions yet — confirm a suggestion or add one manually to see your chart.
           </p>
         ) : (
-          <BarChart data={graphData} />
+          <BarChart data={graphData} sym={currencySymbol} />
         )}
       </div>
 
@@ -786,8 +829,10 @@ export default function RecurringTransactions() {
       ) : (
         recurring.map(entry => {
           const cat = entry.category_id ? catMap.get(entry.category_id) : null
-          const isExpanded = expandedId === entry.id
-          const lastThree = isExpanded ? getLastThree(entry) : []
+          const isExpanded   = expandedId === entry.id
+          const allEntryTxns = isExpanded ? getEntryTransactions(entry) : []
+          const showingAll   = showAllEntries.has(entry.id)
+          const visibleTxns  = showingAll ? allEntryTxns : allEntryTxns.slice(0, ENTRY_LIMIT)
 
           return (
             <div key={entry.id} style={s.card}>
@@ -826,29 +871,43 @@ export default function RecurringTransactions() {
 
               {isExpanded && (
                 <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: '1px solid var(--color-border)' }}>
-                  {lastThree.length === 0 ? (
+                  {allEntryTxns.length === 0 ? (
                     <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', margin: 0 }}>
                       No matching transactions found in your history.
                     </p>
                   ) : (
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-                      <thead>
-                        <tr>
-                          <th style={{ textAlign: 'left', padding: '4px 8px', color: 'var(--color-text-muted)', fontWeight: 600, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Date</th>
-                          <th style={{ textAlign: 'right', padding: '4px 8px', color: 'var(--color-text-muted)', fontWeight: 600, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Amount</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {lastThree.map(t => (
-                          <tr key={t.id}>
-                            <td style={{ padding: '6px 8px', color: 'var(--color-text-muted)' }}>{formatDate(t.date)}</td>
-                            <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 500, color: 'var(--color-expense)', fontVariantNumeric: 'tabular-nums' }}>
-                              {currencySymbol}{formatAmount(t.amount)}
-                            </td>
+                    <>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                        <thead>
+                          <tr>
+                            <th style={{ textAlign: 'left', padding: '4px 8px', color: 'var(--color-text-muted)', fontWeight: 600, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Date</th>
+                            <th style={{ textAlign: 'right', padding: '4px 8px', color: 'var(--color-text-muted)', fontWeight: 600, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Amount</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody>
+                          {visibleTxns.map(t => (
+                            <tr key={t.id}>
+                              <td style={{ padding: '6px 8px', color: 'var(--color-text-muted)' }}>{formatDate(t.date)}</td>
+                              <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 500, color: 'var(--color-primary-text)', fontVariantNumeric: 'tabular-nums' }}>
+                                {currencySymbol}{formatAmount(t.amount)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {allEntryTxns.length > ENTRY_LIMIT && (
+                        <button
+                          onClick={() => setShowAllEntries(prev => {
+                            const next = new Set(prev)
+                            next.has(entry.id) ? next.delete(entry.id) : next.add(entry.id)
+                            return next
+                          })}
+                          style={{ fontFamily: 'inherit', fontSize: '12px', color: 'var(--color-primary-text)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '6px 0 0' }}
+                        >
+                          {showingAll ? '▲ Show less' : `▼ Show all ${allEntryTxns.length} transactions`}
+                        </button>
+                      )}
+                    </>
                   )}
                 </div>
               )}
