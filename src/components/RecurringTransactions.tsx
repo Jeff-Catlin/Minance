@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
-import type { Category, Transaction } from '../types'
+import type { Account, Category, Transaction } from '../types'
 import { useSettings } from '../context/SettingsContext'
 import TransactionDetailModal from './TransactionDetailModal'
 import EditTransactionModal from './EditTransactionModal'
@@ -614,6 +614,7 @@ export default function RecurringTransactions() {
   const [recurring, setRecurring] = useState<RecurringEntry[]>([])
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [categories, setCategories] = useState<Category[]>([])
+  const [accountsMap, setAccountsMap] = useState<Map<string, Account>>(new Map())
   const [dismissedKeys, setDismissedKeys] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -627,17 +628,19 @@ export default function RecurringTransactions() {
   const [editingTx, setEditingTx] = useState<Transaction | null>(null)
 
   async function load() {
-    const [{ data: rec }, { data: txns }, { data: cats }, { data: dismissed }] = await Promise.all([
+    const [{ data: rec }, { data: txns }, { data: cats }, { data: dismissed }, { data: accts }] = await Promise.all([
       supabase.from('recurring_transactions').select('*').order('vendor'),
       supabase.from('transactions').select('*').order('date', { ascending: false }),
       supabase.from('categories').select('*').eq('is_archived', false),
       supabase.from('dismissed_suggestions').select('vendor, category_id'),
+      supabase.from('accounts').select('*'),
     ])
 
     setRecurring((rec ?? []) as RecurringEntry[])
     setTransactions(txns ?? [])
     setCategories(cats ?? [])
     setDismissedKeys(new Set((dismissed ?? []).map(d => `${d.vendor}|||${d.category_id ?? ''}`)))
+    setAccountsMap(new Map((accts ?? []).map(a => [a.id, a as Account])))
     setLoading(false)
   }
 
@@ -965,6 +968,7 @@ export default function RecurringTransactions() {
       {detailTx && !editingTx && (
         <TransactionDetailModal
           transaction={detailTx}
+          account={detailTx.account_id ? accountsMap.get(detailTx.account_id) : undefined}
           onEdit={() => { setEditingTx(detailTx); setDetailTx(null) }}
           onDeleted={() => { setDetailTx(null); load() }}
           onClose={() => setDetailTx(null)}

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import { useSettings } from '../context/SettingsContext'
-import type { Category, Transaction } from '../types'
+import type { Account, Category, Transaction } from '../types'
 import TransactionDetailModal from './TransactionDetailModal'
 import EditTransactionModal from './EditTransactionModal'
 
@@ -470,24 +470,27 @@ export default function SavingsTab() {
   const [addGoalOpen, setAddGoalOpen]     = useState(false)
   const [editGoal, setEditGoal]           = useState<SavingsGoal | null>(null)
   const [addEntryGoal, setAddEntryGoal]   = useState<SavingsGoal | null>(null)
+  const [accountsMap, setAccountsMap] = useState<Map<string, Account>>(new Map())
   const [detailTx, setDetailTx] = useState<(Transaction & { categoryName?: string | null }) | null>(null)
   const [editingTx, setEditingTx] = useState<Transaction | null>(null)
   const [dragGoalId, setDragGoalId]       = useState<string | null>(null)
   const [dragOverId, setDragOverId]       = useState<string | null>(null)
 
   async function load() {
-    const [{ data: g }, { data: e }, { data: t }, { data: c }] = await Promise.all([
+    const [{ data: g }, { data: e }, { data: t }, { data: c }, { data: a }] = await Promise.all([
       supabase.from('savings_goals').select('*')
         .order('sort_order', { ascending: true, nullsFirst: false })
         .order('created_at', { ascending: true }),
       supabase.from('savings_entries').select('*').order('date', { ascending: false }),
       supabase.from('transactions').select('*').order('date', { ascending: false }),
       supabase.from('categories').select('*').eq('is_archived', false),
+      supabase.from('accounts').select('*'),
     ])
     setGoals(g ?? [])
     setEntries(e ?? [])
     setTxns(t ?? [])
     setCategories(c ?? [])
+    setAccountsMap(new Map((a ?? []).map(acc => [acc.id, acc as Account])))
     setLoading(false)
   }
 
@@ -789,6 +792,7 @@ export default function SavingsTab() {
       {detailTx && !editingTx && (
         <TransactionDetailModal
           transaction={detailTx}
+          account={detailTx.account_id ? accountsMap.get(detailTx.account_id) : undefined}
           onEdit={() => { setEditingTx(detailTx); setDetailTx(null) }}
           onDeleted={() => { setDetailTx(null); load() }}
           onClose={() => setDetailTx(null)}
