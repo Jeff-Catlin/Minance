@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, Fragment } from 'react'
+import { useState, useEffect, useMemo, useRef, Fragment } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Category, Transaction, TransactionSplit } from '../types'
 import SplitModal from './SplitModal'
@@ -164,6 +164,8 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
   const [filterAmountMode, setFilterAmountMode] = useState<'eq' | 'gte' | 'lte' | 'between'>('eq')
   const [filterAmountValue, setFilterAmountValue] = useState('')
   const [filterAmountMax, setFilterAmountMax] = useState('')
+  const [filterAmountOpen, setFilterAmountOpen] = useState(false)
+  const filterAmountRef = useRef<HTMLDivElement>(null)
 
   async function load() {
     const [{ data: txns }, { data: cats }, { data: splits }, { data: accts }, { data: recur }] = await Promise.all([
@@ -206,6 +208,17 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
   }
 
   useEffect(() => { load() }, [])
+
+  useEffect(() => {
+    if (!filterAmountOpen) return
+    function onMouseDown(e: MouseEvent) {
+      if (filterAmountRef.current && !filterAmountRef.current.contains(e.target as Node)) {
+        setFilterAmountOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onMouseDown)
+    return () => document.removeEventListener('mousedown', onMouseDown)
+  }, [filterAmountOpen])
 
   async function handleDelete(txId: string) {
     await supabase.from('transaction_splits').delete().eq('transaction_id', txId)
@@ -431,39 +444,55 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
           onChange={e => setFilterTo(e.target.value)}
         />
 
-        <select
-          style={{ ...s.filterSelect, flexShrink: 0 }}
-          value={filterAmountMode}
-          onChange={e => { setFilterAmountMode(e.target.value as 'eq' | 'gte' | 'lte' | 'between'); setFilterAmountMax('') }}
-        >
-          <option value="eq">= Exact</option>
-          <option value="gte">≥ At least</option>
-          <option value="lte">≤ At most</option>
-          <option value="between">Between</option>
-        </select>
-        <input
-          style={{ ...s.filterInput, width: '90px', flexShrink: 0 }}
-          type="number"
-          min="0"
-          step="0.01"
-          placeholder="Amount"
-          value={filterAmountValue}
-          onChange={e => setFilterAmountValue(e.target.value)}
-        />
-        {filterAmountMode === 'between' && (
-          <>
-            <span style={{ color: 'var(--color-text-muted)', fontSize: '13px', flexShrink: 0 }}>–</span>
+        <div ref={filterAmountRef} style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', border: '1px solid var(--color-border)', borderRadius: '8px', background: 'var(--color-surface)', height: '34px', overflow: 'hidden' }}>
+            <span style={{ fontSize: '11px', color: 'var(--color-text-muted)', padding: '0 4px 0 8px', flexShrink: 0, userSelect: 'none' }}>
+              {filterAmountMode === 'eq' ? '=' : filterAmountMode === 'gte' ? '≥' : filterAmountMode === 'lte' ? '≤' : '↔'}
+            </span>
             <input
-              style={{ ...s.filterInput, width: '90px', flexShrink: 0 }}
               type="number"
-              min="0"
-              step="0.01"
-              placeholder="Max"
-              value={filterAmountMax}
-              onChange={e => setFilterAmountMax(e.target.value)}
+              style={{ border: 'none', outline: 'none', background: 'transparent', width: '72px', padding: '0 4px', fontSize: '13px', color: 'var(--color-text)', fontFamily: 'inherit' }}
+              placeholder="Amount"
+              value={filterAmountValue}
+              onChange={e => setFilterAmountValue(e.target.value)}
             />
-          </>
-        )}
+            <button
+              onClick={() => setFilterAmountOpen(v => !v)}
+              style={{ border: 'none', borderLeft: '1px solid var(--color-border)', background: filterAmountOpen ? 'rgba(34,195,166,0.08)' : 'transparent', cursor: 'pointer', padding: '0 8px', color: 'var(--color-text-muted)', fontSize: '10px', height: '100%', display: 'flex', alignItems: 'center', flexShrink: 0 }}
+            >
+              ▾
+            </button>
+          </div>
+
+          {filterAmountOpen && (
+            <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 200, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '8px', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', minWidth: '130px', padding: '4px' }}>
+              {(['eq', 'gte', 'lte', 'between'] as const).map(mode => (
+                <button
+                  key={mode}
+                  onClick={() => { setFilterAmountMode(mode); setFilterAmountOpen(false); if (mode !== 'between') setFilterAmountMax('') }}
+                  style={{ display: 'block', width: '100%', textAlign: 'left', padding: '6px 10px', border: 'none', borderRadius: '6px', background: filterAmountMode === mode ? 'rgba(34,195,166,0.1)' : 'transparent', color: filterAmountMode === mode ? 'var(--color-primary-text)' : 'var(--color-text)', cursor: 'pointer', fontSize: '13px', fontFamily: 'inherit', fontWeight: filterAmountMode === mode ? 600 : 400 }}
+                >
+                  {mode === 'eq' ? '= Exact' : mode === 'gte' ? '≥ At least' : mode === 'lte' ? '≤ At most' : '↔ Between'}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {filterAmountMode === 'between' && (
+            <>
+              <span style={{ color: 'var(--color-text-muted)', fontSize: '13px', flexShrink: 0 }}>–</span>
+              <input
+                style={{ ...s.filterInput, width: '90px', flexShrink: 0 }}
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="Max"
+                value={filterAmountMax}
+                onChange={e => setFilterAmountMax(e.target.value)}
+              />
+            </>
+          )}
+        </div>
 
         {hasFilters && (
           <button style={{ ...s.clearBtn, flexShrink: 0 }} onClick={clearFilters}>Clear</button>
