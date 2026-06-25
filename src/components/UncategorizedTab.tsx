@@ -150,7 +150,8 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
   const [filterType, setFilterType] = useState('')
   const [filterFrom, setFilterFrom] = useState('')
   const [filterTo, setFilterTo] = useState('')
-  const [filterAmountMin, setFilterAmountMin] = useState('')
+  const [filterAmountMode, setFilterAmountMode] = useState<'eq' | 'gte' | 'lte' | 'between'>('eq')
+  const [filterAmountValue, setFilterAmountValue] = useState('')
   const [filterAmountMax, setFilterAmountMax] = useState('')
   const [splitModal, setSplitModal] = useState<{ tx: Transaction; splits: TransactionSplit[] } | null>(null)
   const [editingTx, setEditingTx] = useState<Transaction | null>(null)
@@ -276,7 +277,7 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
 
   if (loading) return <p style={{ color: 'var(--color-text-muted)' }}>Loading…</p>
 
-  const hasFilters = search || filterType || filterFrom || filterTo || filterAccount || filterAmountMin || filterAmountMax
+  const hasFilters = search || filterType || filterFrom || filterTo || filterAccount || filterAmountValue
 
   function clearFilters() {
     setSearch('')
@@ -284,7 +285,8 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
     setFilterFrom('')
     setFilterTo('')
     setFilterAccount('')
-    setFilterAmountMin('')
+    setFilterAmountMode('eq')
+    setFilterAmountValue('')
     setFilterAmountMax('')
   }
 
@@ -296,9 +298,17 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
     if (filterTo && t.date > filterTo) return false
     if (filterAccount === '__no_account__') { if (t.account_id !== null) return false }
     else if (filterAccount && t.account_id !== filterAccount) return false
-    const absAmt = Math.abs(t.amount)
-    if (filterAmountMin !== '' && absAmt < parseFloat(filterAmountMin)) return false
-    if (filterAmountMax !== '' && absAmt > parseFloat(filterAmountMax)) return false
+    if (filterAmountValue !== '') {
+      const absAmt = Math.abs(t.amount)
+      const val = parseFloat(filterAmountValue)
+      if (filterAmountMode === 'eq'      && Math.abs(absAmt - val) >= 0.005) return false
+      if (filterAmountMode === 'gte'     && absAmt < val) return false
+      if (filterAmountMode === 'lte'     && absAmt > val) return false
+      if (filterAmountMode === 'between') {
+        if (absAmt < val) return false
+        if (filterAmountMax !== '' && absAmt > parseFloat(filterAmountMax)) return false
+      }
+    }
     return true
   })
   const allSelected = selected.size === displayed.length && displayed.length > 0
@@ -372,27 +382,39 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
           value={filterTo}
           onChange={e => setFilterTo(e.target.value)}
         />
+        <select
+          style={{ ...s.filterSelect, flexShrink: 0 }}
+          value={filterAmountMode}
+          onChange={e => { setFilterAmountMode(e.target.value as 'eq' | 'gte' | 'lte' | 'between'); setFilterAmountMax('') }}
+        >
+          <option value="eq">= Exact</option>
+          <option value="gte">≥ At least</option>
+          <option value="lte">≤ At most</option>
+          <option value="between">Between</option>
+        </select>
         <input
           style={{ ...s.filterInput, width: '90px', flexShrink: 0 }}
           type="number"
           min="0"
           step="0.01"
-          placeholder="Min $"
-          title="Minimum amount"
-          value={filterAmountMin}
-          onChange={e => setFilterAmountMin(e.target.value)}
+          placeholder="Amount"
+          value={filterAmountValue}
+          onChange={e => setFilterAmountValue(e.target.value)}
         />
-        <span style={{ color: 'var(--color-text-muted)', fontSize: '13px', flexShrink: 0 }}>–</span>
-        <input
-          style={{ ...s.filterInput, width: '90px', flexShrink: 0 }}
-          type="number"
-          min="0"
-          step="0.01"
-          placeholder="Max $"
-          title="Maximum amount"
-          value={filterAmountMax}
-          onChange={e => setFilterAmountMax(e.target.value)}
-        />
+        {filterAmountMode === 'between' && (
+          <>
+            <span style={{ color: 'var(--color-text-muted)', fontSize: '13px', flexShrink: 0 }}>–</span>
+            <input
+              style={{ ...s.filterInput, width: '90px', flexShrink: 0 }}
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="Max"
+              value={filterAmountMax}
+              onChange={e => setFilterAmountMax(e.target.value)}
+            />
+          </>
+        )}
         {hasFilters && (
           <button style={{ ...s.btn('ghost'), fontSize: '12px', padding: '4px 10px', flexShrink: 0 }} onClick={clearFilters}>
             Clear

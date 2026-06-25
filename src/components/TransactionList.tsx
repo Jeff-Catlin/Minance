@@ -161,7 +161,8 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
   const [filterFrom, setFilterFrom] = useState(initialFilter?.from ?? '')
   const [filterTo, setFilterTo] = useState(initialFilter?.to ?? '')
   const [filterAccount, setFilterAccount] = useState(initialFilter?.accountId ?? '')
-  const [filterAmountMin, setFilterAmountMin] = useState('')
+  const [filterAmountMode, setFilterAmountMode] = useState<'eq' | 'gte' | 'lte' | 'between'>('eq')
+  const [filterAmountValue, setFilterAmountValue] = useState('')
   const [filterAmountMax, setFilterAmountMax] = useState('')
 
   async function load() {
@@ -268,14 +269,22 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
         if (filterAccount === '__no_account__') { if (t.account_id !== null) return false }
         else if (t.account_id !== filterAccount) return false
       }
-      const absAmt = Math.abs(t.amount)
-      if (filterAmountMin !== '' && absAmt < parseFloat(filterAmountMin)) return false
-      if (filterAmountMax !== '' && absAmt > parseFloat(filterAmountMax)) return false
+      if (filterAmountValue !== '') {
+        const absAmt = Math.abs(t.amount)
+        const val = parseFloat(filterAmountValue)
+        if (filterAmountMode === 'eq'      && Math.abs(absAmt - val) >= 0.005) return false
+        if (filterAmountMode === 'gte'     && absAmt < val) return false
+        if (filterAmountMode === 'lte'     && absAmt > val) return false
+        if (filterAmountMode === 'between') {
+          if (absAmt < val) return false
+          if (filterAmountMax !== '' && absAmt > parseFloat(filterAmountMax)) return false
+        }
+      }
       return true
     })
-  }, [transactions, search, filterCategory, matchingCategoryIds, filterType, filterFrom, filterTo, filterAccount, filterAmountMin, filterAmountMax, splitsMap])
+  }, [transactions, search, filterCategory, matchingCategoryIds, filterType, filterFrom, filterTo, filterAccount, filterAmountMode, filterAmountValue, filterAmountMax, splitsMap])
 
-  const hasFilters = search || filterCategory || filterType || filterFrom || filterTo || filterAccount || filterAmountMin || filterAmountMax
+  const hasFilters = search || filterCategory || filterType || filterFrom || filterTo || filterAccount || filterAmountValue
 
   // Net financial impact of filtered set (income adds, expense subtracts, signed amounts handled correctly)
   const filteredTotal = hasFilters
@@ -302,7 +311,8 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
     setFilterFrom('')
     setFilterTo('')
     setFilterAccount('')
-    setFilterAmountMin('')
+    setFilterAmountMode('eq')
+    setFilterAmountValue('')
     setFilterAmountMax('')
     setSelectedIds(new Set())
   }
@@ -420,27 +430,39 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
           onChange={e => setFilterTo(e.target.value)}
         />
 
+        <select
+          style={{ ...s.filterSelect, flexShrink: 0 }}
+          value={filterAmountMode}
+          onChange={e => { setFilterAmountMode(e.target.value as 'eq' | 'gte' | 'lte' | 'between'); setFilterAmountMax('') }}
+        >
+          <option value="eq">= Exact</option>
+          <option value="gte">≥ At least</option>
+          <option value="lte">≤ At most</option>
+          <option value="between">Between</option>
+        </select>
         <input
           style={{ ...s.filterInput, width: '90px', flexShrink: 0 }}
           type="number"
           min="0"
           step="0.01"
-          placeholder="Min $"
-          title="Minimum amount"
-          value={filterAmountMin}
-          onChange={e => setFilterAmountMin(e.target.value)}
+          placeholder="Amount"
+          value={filterAmountValue}
+          onChange={e => setFilterAmountValue(e.target.value)}
         />
-        <span style={{ color: 'var(--color-text-muted)', fontSize: '13px', flexShrink: 0 }}>–</span>
-        <input
-          style={{ ...s.filterInput, width: '90px', flexShrink: 0 }}
-          type="number"
-          min="0"
-          step="0.01"
-          placeholder="Max $"
-          title="Maximum amount"
-          value={filterAmountMax}
-          onChange={e => setFilterAmountMax(e.target.value)}
-        />
+        {filterAmountMode === 'between' && (
+          <>
+            <span style={{ color: 'var(--color-text-muted)', fontSize: '13px', flexShrink: 0 }}>–</span>
+            <input
+              style={{ ...s.filterInput, width: '90px', flexShrink: 0 }}
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="Max"
+              value={filterAmountMax}
+              onChange={e => setFilterAmountMax(e.target.value)}
+            />
+          </>
+        )}
 
         {hasFilters && (
           <button style={{ ...s.clearBtn, flexShrink: 0 }} onClick={clearFilters}>Clear</button>
