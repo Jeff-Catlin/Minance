@@ -276,14 +276,6 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
 
   const hasFilters = search || filterType || filterFrom || filterTo || filterAccount
 
-  const displayedTotal = hasFilters
-    ? displayed.reduce((sum, t) => {
-        if (t.type === 'income') return sum + t.amount
-        if (t.type === 'expense') return sum - t.amount
-        return sum + t.amount
-      }, 0)
-    : 0
-
   function clearFilters() {
     setSearch('')
     setFilterType('')
@@ -303,6 +295,14 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
     return true
   })
   const allSelected = selected.size === displayed.length && displayed.length > 0
+
+  const displayedTotal = hasFilters
+    ? displayed.reduce((sum, t) => {
+        if (t.type === 'income') return sum + t.amount
+        if (t.type === 'expense') return sum - t.amount
+        return sum + t.amount
+      }, 0)
+    : 0
 
   return (
     <div>
