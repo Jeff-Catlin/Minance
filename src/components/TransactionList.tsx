@@ -144,6 +144,8 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
   const [accounts, setAccounts] = useState<Account[]>([])
   const [accountsMap, setAccountsMap] = useState<Map<string, Account>>(new Map())
   const [recurringKeys, setRecurringKeys] = useState<Set<string>>(new Set())
+  const [excludedTxIds, setExcludedTxIds] = useState<Set<string>>(new Set())
+  const [pendingExcludeId, setPendingExcludeId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
   const [expandedSplit, setExpandedSplit] = useState<string | null>(null)
@@ -169,7 +171,7 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
   const filterAmountRef = useRef<HTMLDivElement>(null)
 
   async function load() {
-    const [{ data: txns }, { data: cats }, { data: splits }, { data: accts }, { data: recur }] = await Promise.all([
+    const [{ data: txns }, { data: cats }, { data: splits }, { data: accts }, { data: recur }, { data: exclusions }] = await Promise.all([
       supabase
         .from('transactions')
         .select('*')
@@ -183,6 +185,7 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
       supabase.from('transaction_splits').select('*'),
       supabase.from('accounts').select('*').order('name'),
       supabase.from('recurring_transactions').select('vendor, category_id'),
+      supabase.from('recurring_exclusions').select('transaction_id'),
     ])
 
     const catMap = new Map((cats ?? []).map(c => [c.id, c.name]))
@@ -205,6 +208,7 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
     setAccounts(aList)
     setAccountsMap(new Map(aList.map(a => [a.id, a])))
     setRecurringKeys(new Set((recur ?? []).map(r => `${r.vendor}|||${r.category_id ?? ''}`)))
+    setExcludedTxIds(new Set((exclusions ?? []).map(e => e.transaction_id)))
     setLoading(false)
   }
 
@@ -226,6 +230,12 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
     await supabase.from('transactions').delete().eq('id', txId)
     setTransactions(prev => prev.filter(t => t.id !== txId))
     setConfirmDeleteId(null)
+  }
+
+  async function handleExcludeFromRecurring(txId: string) {
+    await supabase.from('recurring_exclusions').insert({ transaction_id: txId })
+    setExcludedTxIds(prev => new Set([...prev, txId]))
+    setPendingExcludeId(null)
   }
 
   async function handleTypeChange(txId: string, newType: string) {
@@ -564,12 +574,15 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
                   const catMap = new Map(categories.map(c => [c.id, c.name]))
                   const isExpanded = expandedSplit === t.id
                   const isConfirming = confirmDeleteId === t.id
+                  const isPendingExclude = pendingExcludeId === t.id
+                  const isRecurring = recurringKeys.has(`${t.vendor}|||${t.category_id ?? ''}`)
+                  const isExcluded = excludedTxIds.has(t.id)
 
                   return (
                     <Fragment key={t.id}>
                       <tr
-                        style={{ background: isConfirming ? 'rgba(224,107,107,0.04)' : selectedIds.has(t.id) ? 'rgba(34,195,166,0.04)' : undefined, cursor: 'pointer' }}
-                        onClick={() => !isConfirming && setDetailTx(t)}
+                        style={{ background: (isConfirming || isPendingExclude) ? 'rgba(224,107,107,0.04)' : selectedIds.has(t.id) ? 'rgba(34,195,166,0.04)' : undefined, cursor: 'pointer' }}
+                        onClick={() => !isConfirming && !isPendingExclude && setDetailTx(t)}
                       >
                         {/* Checkbox */}
                         <td style={{ ...s.td, width: '36px' }} onClick={e => e.stopPropagation()}>
@@ -686,13 +699,19 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
 
                         {/* Recurring indicator */}
                         <td style={{ ...s.td, width: '28px', padding: '10px 4px', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
-                          {recurringKeys.has(`${t.vendor}|||${t.category_id ?? ''}`) && (
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary-text)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><title>Recurring transaction</title>
-                              <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
-                              <path d="M21 3v5h-5"/>
-                              <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
-                              <path d="M8 16H3v5"/>
-                            </svg>
+                          {isRecurring && (
+                            <button
+                              title={isExcluded ? 'Excluded from recurring group' : 'Remove from recurring group'}
+                              onClick={e => { e.stopPropagation(); if (!isExcluded && !isPendingExclude) setPendingExcludeId(t.id); }}
+                              style={{ background: isPendingExclude ? 'rgba(224,107,107,0.12)' : 'transparent', border: 'none', cursor: isExcluded ? 'default' : 'pointer', padding: '2px', borderRadius: '4px', display: 'inline-flex', opacity: isExcluded ? 0.25 : 1 }}
+                            >
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={isPendingExclude ? 'var(--color-expense)' : 'var(--color-primary-text)'} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+                                <path d="M21 3v5h-5"/>
+                                <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+                                <path d="M8 16H3v5"/>
+                              </svg>
+                            </button>
                           )}
                         </td>
 
@@ -723,6 +742,25 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
                           )}
                         </td>
                       </tr>
+
+                      {/* Recurring exclusion confirmation row */}
+                      {isPendingExclude && (
+                        <tr>
+                          <td colSpan={9} style={{ padding: '6px 14px 10px 50px', background: 'rgba(224,107,107,0.06)', borderBottom: '1px solid var(--color-border)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                              <span style={{ fontSize: '13px', color: 'var(--color-text)' }}>Remove from recurring group?</span>
+                              <button
+                                onClick={() => handleExcludeFromRecurring(t.id)}
+                                style={{ fontFamily: 'inherit', fontSize: '12px', padding: '3px 10px', borderRadius: '6px', border: '1px solid var(--color-expense)', background: 'var(--color-expense)', color: '#fff', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                              >✓ Confirm</button>
+                              <button
+                                onClick={() => setPendingExcludeId(null)}
+                                style={{ fontFamily: 'inherit', fontSize: '12px', padding: '3px 10px', borderRadius: '6px', border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-muted)', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                              >✕ Cancel</button>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
 
                       {/* Split detail row */}
                       {t.is_split && isExpanded && (
