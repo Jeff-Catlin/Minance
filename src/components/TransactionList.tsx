@@ -142,6 +142,7 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
   const [splitsMap, setSplitsMap] = useState<Map<string, TransactionSplit[]>>(new Map())
   const [accounts, setAccounts] = useState<Account[]>([])
   const [accountsMap, setAccountsMap] = useState<Map<string, Account>>(new Map())
+  const [recurringKeys, setRecurringKeys] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
   const [expandedSplit, setExpandedSplit] = useState<string | null>(null)
@@ -161,7 +162,7 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
   const [filterAccount, setFilterAccount] = useState(initialFilter?.accountId ?? '')
 
   async function load() {
-    const [{ data: txns }, { data: cats }, { data: splits }, { data: accts }] = await Promise.all([
+    const [{ data: txns }, { data: cats }, { data: splits }, { data: accts }, { data: recur }] = await Promise.all([
       supabase
         .from('transactions')
         .select('*')
@@ -174,6 +175,7 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
         .order('name'),
       supabase.from('transaction_splits').select('*'),
       supabase.from('accounts').select('*').order('name'),
+      supabase.from('recurring_transactions').select('vendor, category_id'),
     ])
 
     const catMap = new Map((cats ?? []).map(c => [c.id, c.name]))
@@ -195,6 +197,7 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
     const aList = (accts ?? []) as Account[]
     setAccounts(aList)
     setAccountsMap(new Map(aList.map(a => [a.id, a])))
+    setRecurringKeys(new Set((recur ?? []).map(r => `${r.vendor}|||${r.category_id ?? ''}`)))
     setLoading(false)
   }
 
@@ -431,6 +434,7 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
                   <th style={{ ...s.th, textAlign: 'right' }}>Amount</th>
                   <th style={s.th}>Category</th>
                   <th style={s.th}>Type</th>
+                  <th style={{ ...s.th, width: '28px' }}></th>
                   <th style={{ ...s.th, width: '64px' }}></th>
                 </tr>
               </thead>
@@ -560,6 +564,18 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
                           )}
                         </td>
 
+                        {/* Recurring indicator */}
+                        <td style={{ ...s.td, width: '28px', padding: '10px 4px', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
+                          {recurringKeys.has(`${t.vendor}|||${t.category_id ?? ''}`) && (
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary-text)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><title>Recurring transaction</title>
+                              <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+                              <path d="M21 3v5h-5"/>
+                              <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+                              <path d="M8 16H3v5"/>
+                            </svg>
+                          )}
+                        </td>
+
                         {/* Actions */}
                         <td style={{ ...s.td, width: '64px', padding: '10px 4px' }} onClick={e => e.stopPropagation()}>
                           {isConfirming ? (
@@ -591,7 +607,7 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
                       {/* Split detail row */}
                       {t.is_split && isExpanded && (
                         <tr>
-                          <td colSpan={8} style={{ padding: '0 14px 12px 28px', background: 'var(--color-bg)' }}>
+                          <td colSpan={9} style={{ padding: '0 14px 12px 28px', background: 'var(--color-bg)' }}>
                             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                               <tbody>
                                 {txSplits.map(sp => (

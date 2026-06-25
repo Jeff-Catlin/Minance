@@ -614,13 +614,14 @@ export default function RecurringTransactions() {
   async function handleConfirm(sg: Suggestion) {
     const matches = transactions.filter(t => t.vendor === sg.vendor && t.category_id === sg.category_id)
     const { expected_day, expected_month } = detectExpectedDate(matches, sg.cadence)
-    await supabase.from('recurring_transactions').insert({
+    const { error } = await supabase.from('recurring_transactions').insert({
       vendor: sg.vendor,
       category_id: sg.category_id,
       cadence: sg.cadence,
       expected_day,
       expected_month,
     })
+    if (error) { console.error('Confirm failed:', error.message); return }
     load()
   }
 

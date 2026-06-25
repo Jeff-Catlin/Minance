@@ -215,6 +215,18 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
     setSelected(new Set())
   }
 
+  async function handleTypeChange(txId: string, newType: string) {
+    await supabase.from('transactions').update({ type: newType }).eq('id', txId)
+    // card_payment type is filtered out of this tab — remove from list
+    if (newType === 'card_payment') {
+      const updated = transactions.filter(t => t.id !== txId)
+      setTransactions(updated)
+      onCountChange(updated.length)
+    } else {
+      setTransactions(prev => prev.map(t => t.id === txId ? { ...t, type: newType as 'expense' | 'income' | 'card_payment' } : t))
+    }
+  }
+
   async function handleDelete(txId: string) {
     await supabase.from('transaction_splits').delete().eq('transaction_id', txId)
     await supabase.from('transactions').delete().eq('id', txId)
@@ -327,6 +339,7 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
                   <th style={s.th}>Description</th>
                   <th style={{ ...s.th, textAlign: 'right' }}>Amount</th>
                   <th style={s.th}>Category</th>
+                  <th style={s.th}>Type</th>
                   <th style={{ ...s.th, width: '64px' }}></th>
                 </tr>
               </thead>
@@ -402,6 +415,17 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
                           Split
                         </button>
                       </div>
+                    </td>
+                    <td style={s.td} onClick={e => e.stopPropagation()}>
+                      <select
+                        style={{ ...s.select, maxWidth: '130px', fontSize: '12px' }}
+                        value={t.type}
+                        onChange={e => handleTypeChange(t.id, e.target.value)}
+                      >
+                        <option value="expense">Expense</option>
+                        <option value="income">Income</option>
+                        <option value="card_payment">Card Payment</option>
+                      </select>
                     </td>
                     <td style={{ ...s.td, width: '64px', padding: '10px 4px' }} onClick={e => e.stopPropagation()}>
                       {confirmDeleteId === t.id ? (
