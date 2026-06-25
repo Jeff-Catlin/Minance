@@ -513,12 +513,12 @@ export default function Dashboard({ onDrillDown, onUncatDrillDown }: DashboardPr
 
         const childRows = children
           .map(c => ({ id: c.id, name: c.name, total: getCategoryTotal(c.id, type) }))
-          .filter(c => c.total > 0)
+          .filter(c => Math.abs(c.total) >= 0.005)
 
         const directTotal = getCategoryTotal(parent.id, type)
         const parentTotal = directTotal + childRows.reduce((s, c) => s + c.total, 0)
 
-        if (parentTotal > 0) {
+        if (Math.abs(parentTotal) >= 0.005) {
           rows.push({ parentId: parent.id, parentName: parent.name, parentTotal, children: childRows })
         }
       }
@@ -627,11 +627,11 @@ export default function Dashboard({ onDrillDown, onUncatDrillDown }: DashboardPr
                     />
                     {renderBudgetBar(row.parentTotal, scaledParentBudget, isIncome)}
                   </td>
-                  <td style={{ ...s.parentTd(color), textAlign: 'right', fontVariantNumeric: 'tabular-nums', verticalAlign: 'top' }}>
-                    ${formatAmount(row.parentTotal)}
+                  <td style={{ ...s.parentTd(row.parentTotal < 0 ? 'var(--color-income)' : color), textAlign: 'right', fontVariantNumeric: 'tabular-nums', verticalAlign: 'top' }}>
+                    {row.parentTotal < 0 ? '−' : ''}{currencySymbol}{formatAmount(Math.abs(row.parentTotal))}
                     {scaledParentBudget !== null && (
                       <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', fontWeight: 400 }}>
-                        of ${formatAmount(scaledParentBudget)}
+                        of {currencySymbol}{formatAmount(scaledParentBudget)}
                       </div>
                     )}
                   </td>
@@ -649,11 +649,11 @@ export default function Dashboard({ onDrillDown, onUncatDrillDown }: DashboardPr
                         />
                         {renderBudgetBar(child.total, scaledChildBudget, isIncome)}
                       </td>
-                      <td style={{ ...s.childTd(color), textAlign: 'right', fontVariantNumeric: 'tabular-nums', opacity: 0.8, verticalAlign: 'top' }}>
-                        ${formatAmount(child.total)}
+                      <td style={{ ...s.childTd(child.total < 0 ? 'var(--color-income)' : color), textAlign: 'right', fontVariantNumeric: 'tabular-nums', opacity: 0.8, verticalAlign: 'top' }}>
+                        {child.total < 0 ? '−' : ''}{currencySymbol}{formatAmount(Math.abs(child.total))}
                         {scaledChildBudget !== null && (
                           <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', fontWeight: 400, opacity: 1 }}>
-                            of ${formatAmount(scaledChildBudget)}
+                            of {currencySymbol}{formatAmount(scaledChildBudget)}
                           </div>
                         )}
                       </td>
