@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import { useSettings } from '../context/SettingsContext'
 import type { Category, Transaction } from '../types'
+import TransactionDetailModal from './TransactionDetailModal'
+import EditTransactionModal from './EditTransactionModal'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -468,6 +470,8 @@ export default function SavingsTab() {
   const [addGoalOpen, setAddGoalOpen]     = useState(false)
   const [editGoal, setEditGoal]           = useState<SavingsGoal | null>(null)
   const [addEntryGoal, setAddEntryGoal]   = useState<SavingsGoal | null>(null)
+  const [detailTx, setDetailTx] = useState<(Transaction & { categoryName?: string | null }) | null>(null)
+  const [editingTx, setEditingTx] = useState<Transaction | null>(null)
   const [dragGoalId, setDragGoalId]       = useState<string | null>(null)
   const [dragOverId, setDragOverId]       = useState<string | null>(null)
 
@@ -706,8 +710,15 @@ export default function SavingsTab() {
                         </p>
                       ) : (
                         <>
-                          {visible.map(item => (
-                            <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--color-border)' }}>
+                          {visible.map(item => {
+                            const isCategory = item.kind === 'category'
+                            const fullTx = isCategory ? transactions.find(t => t.id === item.id) : null
+                            return (
+                            <div
+                              key={item.id}
+                              onClick={isCategory && fullTx ? () => setDetailTx({ ...fullTx, categoryName: fullTx.category_id ? catMap.get(fullTx.category_id) ?? null : null }) : undefined}
+                              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--color-border)', cursor: isCategory ? 'pointer' : 'default' }}
+                            >
                               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
                                 <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', flexShrink: 0 }}>{formatDate(item.date)}</span>
                                 {item.kind === 'manual' ? (
@@ -724,11 +735,11 @@ export default function SavingsTab() {
                                   {formatAmount(item.amount, currencySymbol)}
                                 </span>
                                 {item.kind === 'manual' && (
-                                  <button onClick={() => deleteEntry(item.id)} style={{ fontFamily: 'inherit', fontSize: '13px', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', padding: '0 2px', lineHeight: 1 }}>×</button>
+                                  <button onClick={e => { e.stopPropagation(); deleteEntry(item.id) }} style={{ fontFamily: 'inherit', fontSize: '13px', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', padding: '0 2px', lineHeight: 1 }}>×</button>
                                 )}
                               </div>
                             </div>
-                          ))}
+                          )})}
 
                           {totalCount > CONTRIBUTION_LIMIT && (
                             <button
@@ -772,6 +783,22 @@ export default function SavingsTab() {
           goal={addEntryGoal}
           onSave={() => { setAddEntryGoal(null); load() }}
           onClose={() => setAddEntryGoal(null)}
+        />
+      )}
+
+      {detailTx && !editingTx && (
+        <TransactionDetailModal
+          transaction={detailTx}
+          onEdit={() => { setEditingTx(detailTx); setDetailTx(null) }}
+          onDeleted={() => { setDetailTx(null); load() }}
+          onClose={() => setDetailTx(null)}
+        />
+      )}
+      {editingTx && (
+        <EditTransactionModal
+          transaction={editingTx}
+          onSave={() => { setEditingTx(null); load() }}
+          onClose={() => setEditingTx(null)}
         />
       )}
     </div>

@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Category, Transaction } from '../types'
 import { useSettings } from '../context/SettingsContext'
+import TransactionDetailModal from './TransactionDetailModal'
+import EditTransactionModal from './EditTransactionModal'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -621,6 +623,8 @@ export default function RecurringTransactions() {
   const [graphFilter, setGraphFilter] = useState<GraphFilter>('all')
   const [graphRange, setGraphRange] = useState<GraphRange>(1)
   const [showAddModal, setShowAddModal] = useState(false)
+  const [detailTx, setDetailTx] = useState<(Transaction & { categoryName?: string | null }) | null>(null)
+  const [editingTx, setEditingTx] = useState<Transaction | null>(null)
 
   async function load() {
     const [{ data: rec }, { data: txns }, { data: cats }, { data: dismissed }] = await Promise.all([
@@ -776,7 +780,7 @@ export default function RecurringTransactions() {
                   {isOpen && (
                     <div style={{ borderTop: '1px solid var(--color-border)', padding: '8px 14px 10px' }}>
                       {visible.map(t => (
-                        <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid var(--color-border)' }}>
+                        <div key={t.id} onClick={() => setDetailTx({ ...t, categoryName: t.category_id ? catMap.get(t.category_id)?.name ?? null : null })} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid var(--color-border)', cursor: 'pointer' }}>
                           <div style={{ display: 'flex', gap: '12px' }}>
                             <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', flexShrink: 0 }}>{formatDate(t.date)}</span>
                             <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>{t.vendor}</span>
@@ -913,7 +917,7 @@ export default function RecurringTransactions() {
                         </thead>
                         <tbody>
                           {visibleTxns.map(t => (
-                            <tr key={t.id}>
+                            <tr key={t.id} onClick={() => setDetailTx({ ...t, categoryName: t.category_id ? catMap.get(t.category_id)?.name ?? null : null })} style={{ cursor: 'pointer' }}>
                               <td style={{ padding: '6px 8px', color: 'var(--color-text-muted)' }}>{formatDate(t.date)}</td>
                               <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 500, color: 'var(--color-primary-text)', fontVariantNumeric: 'tabular-nums' }}>
                                 {currencySymbol}{formatAmount(t.amount)}
@@ -955,6 +959,22 @@ export default function RecurringTransactions() {
             return null
           }}
           onClose={() => setShowAddModal(false)}
+        />
+      )}
+
+      {detailTx && !editingTx && (
+        <TransactionDetailModal
+          transaction={detailTx}
+          onEdit={() => { setEditingTx(detailTx); setDetailTx(null) }}
+          onDeleted={() => { setDetailTx(null); load() }}
+          onClose={() => setDetailTx(null)}
+        />
+      )}
+      {editingTx && (
+        <EditTransactionModal
+          transaction={editingTx}
+          onSave={() => { setEditingTx(null); load() }}
+          onClose={() => setEditingTx(null)}
         />
       )}
     </div>
