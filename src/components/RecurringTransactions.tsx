@@ -25,7 +25,7 @@ interface Suggestion {
   category_id: string | null
   cadence: Cadence
   occurrences: number
-  recentAmount: number
+  avgAmount: number
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -146,7 +146,7 @@ function detectPatterns(
       category_id: catId === '' ? null : catId,
       cadence,
       occurrences: txns.length,
-      recentAmount: sorted[sorted.length - 1].amount,
+      avgAmount: sorted.reduce((s, t) => s + t.amount, 0) / sorted.length,
     })
   }
 
@@ -691,7 +691,7 @@ export default function RecurringTransactions() {
                         })}
                         style={{ fontFamily: 'inherit', fontSize: '12px', color: 'var(--color-text-muted)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px 0 0', display: 'block' }}
                       >
-                        {isOpen ? '▲' : '▼'} {sg.occurrences} occurrences · ~{currencySymbol}{formatAmount(sg.recentAmount)}
+                        {isOpen ? '▲' : '▼'} {sg.occurrences} occurrences · ~{currencySymbol}{formatAmount(sg.avgAmount)}
                       </button>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0, paddingTop: '2px' }}>
