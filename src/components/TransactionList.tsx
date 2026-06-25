@@ -133,6 +133,7 @@ interface DrillDownFilter {
   accountId?: string
   from?: string
   to?: string
+  type?: string
 }
 
 export default function TransactionList({ initialFilter }: { initialFilter?: DrillDownFilter | null }) {
@@ -156,7 +157,7 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
   // Filters — initialized from drilldown if provided
   const [search, setSearch] = useState('')
   const [filterCategory, setFilterCategory] = useState(initialFilter?.categoryId ?? '')
-  const [filterType, setFilterType] = useState('')
+  const [filterType, setFilterType] = useState(initialFilter?.type ?? '')
   const [filterFrom, setFilterFrom] = useState(initialFilter?.from ?? '')
   const [filterTo, setFilterTo] = useState(initialFilter?.to ?? '')
   const [filterAccount, setFilterAccount] = useState(initialFilter?.accountId ?? '')

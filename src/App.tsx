@@ -22,12 +22,12 @@ export default function App() {
   const { settings } = useSettings()
   const [screen, setScreen] = useState<Screen>(settings.defaultLanding)
   const [prevScreen, setPrevScreen] = useState<Exclude<Screen, 'settings'>>('dashboard')
-  const [txFilter, setTxFilter] = useState<{ categoryId?: string; accountId?: string; from?: string; to?: string } | null>(null)
+  const [txFilter, setTxFilter] = useState<{ categoryId?: string; accountId?: string; from?: string; to?: string; type?: 'expense' | 'income' } | null>(null)
   const [txFilterKey, setTxFilterKey] = useState(0)
   const [txInitialSubTab, setTxInitialSubTab] = useState<'all' | 'uncategorized' | null>(null)
 
-  function handleDrillDown(categoryId: string, from: string, to: string) {
-    setTxFilter({ categoryId, from, to })
+  function handleDrillDown(categoryId: string, from: string, to: string, type: 'expense' | 'income') {
+    setTxFilter({ categoryId, from, to, type })
     setTxInitialSubTab('all')
     setTxFilterKey(k => k + 1)
     setScreen('transactions')

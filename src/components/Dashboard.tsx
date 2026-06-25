@@ -391,7 +391,7 @@ function DrillLink({ name, onClick, stopProp = false }: {
 }
 
 interface DashboardProps {
-  onDrillDown?: (categoryId: string, from: string, to: string) => void
+  onDrillDown?: (categoryId: string, from: string, to: string, type: 'expense' | 'income') => void
   onUncatDrillDown?: () => void
 }
 
@@ -622,7 +622,7 @@ export default function Dashboard({ onDrillDown, onUncatDrillDown }: DashboardPr
                     )}
                     <DrillLink
                       name={row.parentName}
-                      onClick={onDrillDown ? () => onDrillDown(row.parentId, range.from, range.to) : undefined}
+                      onClick={onDrillDown ? () => onDrillDown(row.parentId, range.from, range.to, isIncome ? 'income' : 'expense') : undefined}
                       stopProp
                     />
                     {renderBudgetBar(row.parentTotal, scaledParentBudget, isIncome)}
@@ -645,7 +645,7 @@ export default function Dashboard({ onDrillDown, onUncatDrillDown }: DashboardPr
                       <td style={s.childTd()}>
                         <DrillLink
                           name={child.name}
-                          onClick={onDrillDown ? () => onDrillDown(child.id, range.from, range.to) : undefined}
+                          onClick={onDrillDown ? () => onDrillDown(child.id, range.from, range.to, isIncome ? 'income' : 'expense') : undefined}
                         />
                         {renderBudgetBar(child.total, scaledChildBudget, isIncome)}
                       </td>
@@ -763,7 +763,7 @@ export default function Dashboard({ onDrillDown, onUncatDrillDown }: DashboardPr
                   total={totalExpenses}
                   uncatAmount={uncatExpense > 0 ? uncatExpense : undefined}
                   sym={currencySymbol}
-                  onSliceClick={onDrillDown ? (catId) => onDrillDown(catId, range.from, range.to) : undefined}
+                  onSliceClick={onDrillDown ? (catId) => onDrillDown(catId, range.from, range.to, 'expense') : undefined}
                   onUncatClick={onUncatDrillDown}
                 />
               )}
