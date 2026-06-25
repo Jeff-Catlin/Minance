@@ -10,7 +10,7 @@ import EditTransactionModal from './EditTransactionModal'
 type Cadence = 'monthly' | 'quarterly' | 'biannually' | 'annually'
 type GraphMode = 'historical' | 'forecast'
 type GraphFilter = 'all' | 'monthly'
-type GraphRange = 1 | 3 | 6 | 12
+type GraphRange = 1 | 3 | 6 | 12 | 'ytd'
 
 interface RecurringEntry {
   id: string
@@ -169,7 +169,9 @@ function buildHistoricalData(
   const filtered = filter === 'monthly' ? recurring.filter(r => r.cadence === 'monthly') : recurring
   const data: BarPoint[] = []
 
-  for (let i = range - 1; i >= 0; i--) {
+  const monthsBack = range === 'ytd' ? now.getMonth() : (range as number) - 1
+
+  for (let i = monthsBack; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
     const y = d.getFullYear()
     const m = d.getMonth()
@@ -201,7 +203,9 @@ function buildForecastData(
   const filtered = filter === 'monthly' ? recurring.filter(r => r.cadence === 'monthly') : recurring
   const data: BarPoint[] = []
 
-  for (let i = 0; i < range; i++) {
+  const monthsAhead = range === 'ytd' ? 12 - now.getMonth() : range as number
+
+  for (let i = 0; i < monthsAhead; i++) {
     const d = new Date(now.getFullYear(), now.getMonth() + i, 1)
     const year = d.getFullYear()
     const month = d.getMonth()
@@ -820,8 +824,8 @@ export default function RecurringTransactions() {
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '10px' }}>
             <p style={s.sectionTitle}>
               {graphMode === 'historical'
-                ? `Recurring spend — ${graphRange === 1 ? 'this month' : `last ${graphRange} months`}`
-                : `Projected recurring spend — ${graphRange === 1 ? 'next month' : `next ${graphRange} months`}`
+                ? `Recurring spend — ${graphRange === 'ytd' ? 'YTD' : graphRange === 1 ? 'this month' : `last ${graphRange} months`}`
+                : `Projected recurring spend — ${graphRange === 'ytd' ? 'rest of year' : graphRange === 1 ? 'next month' : `next ${graphRange} months`}`
               }
             </p>
             <p style={{ margin: 0, fontSize: '13px', color: 'var(--color-text-muted)', flexShrink: 0, marginLeft: '12px' }}>
@@ -836,9 +840,9 @@ export default function RecurringTransactions() {
             <button style={s.toggleBtn(graphFilter === 'all')} onClick={() => setGraphFilter('all')}>All</button>
             <button style={s.toggleBtn(graphFilter === 'monthly')} onClick={() => setGraphFilter('monthly')}>Monthly only</button>
             <div style={{ width: '1px', background: 'var(--color-border)', margin: '0 4px' }} />
-            {([1, 3, 6, 12] as GraphRange[]).map(r => (
+            {([1, 3, 6, 12, 'ytd'] as GraphRange[]).map(r => (
               <button key={r} style={s.toggleBtn(graphRange === r)} onClick={() => setGraphRange(r)}>
-                {r === 1 ? '1M' : r === 3 ? '3M' : r === 6 ? '6M' : '12M'}
+                {r === 'ytd' ? 'YTD' : r === 1 ? '1M' : r === 3 ? '3M' : r === 6 ? '6M' : '12M'}
               </button>
             ))}
           </div>

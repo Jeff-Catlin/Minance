@@ -9,7 +9,7 @@ function toISO(d: Date) {
   return d.toISOString().slice(0, 10)
 }
 
-type Period = 'week' | 'month' | 'year'
+type Period = 'week' | 'month' | 'ytd' | 'year'
 type Relative = 'current' | 'last'
 
 function getRange(period: Period, relative: Relative): { from: string; to: string } {
@@ -40,6 +40,10 @@ function getRange(period: Period, relative: Relative): { from: string; to: strin
     } else {
       return { from: toISO(new Date(y, m - 1, 1)), to: toISO(new Date(y, m, 0)) }
     }
+  }
+  // ytd — always Jan 1 of current year through today
+  if (period === 'ytd') {
+    return { from: toISO(new Date(y, 0, 1)), to: toISO(now) }
   }
   // year
   if (relative === 'current') {
@@ -417,7 +421,7 @@ export default function Dashboard({ onDrillDown, onUncatDrillDown }: DashboardPr
   }, [period, relative, customFrom, customTo, isCustom])
 
   const budgetMultiplier = useMemo(() => {
-    if (isCustom && range.from && range.to) {
+    if ((isCustom || period === 'ytd') && range.from && range.to) {
       const days = (new Date(range.to).getTime() - new Date(range.from).getTime()) / 86400000 + 1
       return days / 30.44
     }
@@ -688,8 +692,8 @@ export default function Dashboard({ onDrillDown, onUncatDrillDown }: DashboardPr
 
       {/* Time filter */}
       <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap' }}>
-        {/* Last / Current toggle — only shown when not on custom */}
-        {!isCustom && (
+        {/* Last / Current toggle — only shown when not on custom or YTD */}
+        {!isCustom && period !== 'ytd' && (
           <>
             <button style={s.presetBtn(relative === 'last')} onClick={() => setRelative('last')}>Last</button>
             <button style={s.presetBtn(relative === 'current')} onClick={() => setRelative('current')}>Current</button>
@@ -698,13 +702,13 @@ export default function Dashboard({ onDrillDown, onUncatDrillDown }: DashboardPr
         )}
 
         {/* Period buttons */}
-        {(['week', 'month', 'year'] as Period[]).map(p => (
+        {(['week', 'month', 'ytd', 'year'] as Period[]).map(p => (
           <button
             key={p}
             style={s.presetBtn(!isCustom && period === p)}
             onClick={() => { setPeriod(p) }}
           >
-            {p.charAt(0).toUpperCase() + p.slice(1)}
+            {p === 'ytd' ? 'YTD' : p.charAt(0).toUpperCase() + p.slice(1)}
           </button>
         ))}
 
