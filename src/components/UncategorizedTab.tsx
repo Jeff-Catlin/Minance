@@ -276,6 +276,14 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
 
   const hasFilters = search || filterType || filterFrom || filterTo || filterAccount
 
+  const displayedTotal = hasFilters
+    ? displayed.reduce((sum, t) => {
+        if (t.type === 'income') return sum + t.amount
+        if (t.type === 'expense') return sum - t.amount
+        return sum + t.amount
+      }, 0)
+    : 0
+
   function clearFilters() {
     setSearch('')
     setFilterType('')
@@ -303,9 +311,21 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
         <h2 style={{ fontSize: '20px', fontWeight: 600, color: 'var(--color-text)', margin: 0 }}>
           Uncategorized
         </h2>
-        <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>
-          {transactions.length} {transactions.length === 1 ? 'transaction' : 'transactions'} remaining
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          {hasFilters && (
+            <span style={{
+              fontSize: '16px', fontWeight: 700, fontVariantNumeric: 'tabular-nums',
+              color: displayedTotal >= 0 ? 'var(--color-income)' : 'var(--color-expense)',
+            }}>
+              {displayedTotal >= 0 ? '+' : '−'}{currencySymbol}{Math.abs(displayedTotal).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+          )}
+          <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>
+            {hasFilters
+              ? `${displayed.length.toLocaleString()} of ${transactions.length.toLocaleString()}`
+              : `${transactions.length} ${transactions.length === 1 ? 'transaction' : 'transactions'} remaining`}
+          </span>
+        </div>
       </div>
 
       {/* Filter bar */}

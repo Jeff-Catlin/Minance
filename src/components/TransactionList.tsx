@@ -271,6 +271,15 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
 
   const hasFilters = search || filterCategory || filterType || filterFrom || filterTo || filterAccount
 
+  // Net financial impact of filtered set (income adds, expense subtracts, signed amounts handled correctly)
+  const filteredTotal = hasFilters
+    ? filtered.reduce((sum, t) => {
+        if (t.type === 'income') return sum + t.amount
+        if (t.type === 'expense') return sum - t.amount
+        return sum + t.amount // card_payment: already signed correctly in storage
+      }, 0)
+    : 0
+
   function clearFilters() {
     setSearch('')
     setFilterCategory('')
@@ -317,11 +326,21 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
         <h2 style={s.heading}>Transactions</h2>
-        <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>
-          {filtered.length !== transactions.length
-            ? `${filtered.length.toLocaleString()} of ${transactions.length.toLocaleString()}`
-            : `${transactions.length.toLocaleString()} total`}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          {hasFilters && (
+            <span style={{
+              fontSize: '16px', fontWeight: 700, fontVariantNumeric: 'tabular-nums',
+              color: filteredTotal >= 0 ? 'var(--color-income)' : 'var(--color-expense)',
+            }}>
+              {filteredTotal >= 0 ? '+' : '−'}{currencySymbol}{Math.abs(filteredTotal).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+          )}
+          <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>
+            {filtered.length !== transactions.length
+              ? `${filtered.length.toLocaleString()} of ${transactions.length.toLocaleString()}`
+              : `${transactions.length.toLocaleString()} total`}
+          </span>
+        </div>
       </div>
 
       {/* Filter bar */}
