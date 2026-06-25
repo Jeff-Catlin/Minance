@@ -71,7 +71,7 @@ const CADENCE_TOLERANCE: Record<Cadence, number> = {
 const CADENCE_COLORS: Record<Cadence, string> = {
   weekly: '#10B981',
   biweekly: '#06B6D4',
-  monthly: 'var(--color-primary-text)',
+  monthly: '#0E9F8E',
   quarterly: '#8B5CF6',
   biannually: '#F59E0B',
   annually: '#EF4444',
