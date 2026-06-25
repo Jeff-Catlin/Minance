@@ -373,6 +373,7 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
       {/* Filter bar */}
       <div style={{
         display: 'flex',
+        flexWrap: 'wrap',
         gap: '6px',
         alignItems: 'center',
         marginBottom: '12px',
