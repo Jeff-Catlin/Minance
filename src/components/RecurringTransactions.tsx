@@ -692,16 +692,19 @@ export default function RecurringTransactions() {
   const [confirmingKey, setConfirmingKey] = useState<string | null>(null)
   const [confirmErrors, setConfirmErrors] = useState<Map<string, string>>(new Map())
   const [cadenceFilter, setCadenceFilter] = useState<Cadence | ''>('')
+  const [excludedIds, setExcludedIds] = useState<Set<string>>(new Set())
+  const [pendingExclude, setPendingExclude] = useState<string | null>(null)
   const [detailTx, setDetailTx] = useState<(Transaction & { categoryName?: string | null }) | null>(null)
   const [editingTx, setEditingTx] = useState<Transaction | null>(null)
 
   async function load() {
-    const [{ data: rec }, { data: txns }, { data: cats }, { data: dismissed }, { data: accts }] = await Promise.all([
+    const [{ data: rec }, { data: txns }, { data: cats }, { data: dismissed }, { data: accts }, { data: exclusions }] = await Promise.all([
       supabase.from('recurring_transactions').select('*').order('vendor'),
       supabase.from('transactions').select('*').order('date', { ascending: false }),
       supabase.from('categories').select('*').eq('is_archived', false),
       supabase.from('dismissed_suggestions').select('vendor, category_id'),
       supabase.from('accounts').select('*'),
+      supabase.from('recurring_exclusions').select('transaction_id'),
     ])
 
     setRecurring((rec ?? []) as RecurringEntry[])
@@ -709,6 +712,7 @@ export default function RecurringTransactions() {
     setCategories(cats ?? [])
     setDismissedKeys(new Set((dismissed ?? []).map(d => `${d.vendor}|||${d.category_id ?? ''}`)))
     setAccountsMap(new Map((accts ?? []).map(a => [a.id, a as Account])))
+    setExcludedIds(new Set((exclusions ?? []).map(e => e.transaction_id)))
     setLoading(false)
   }
 
@@ -716,15 +720,20 @@ export default function RecurringTransactions() {
 
   // ── Derived data ─────────────────────────────────────────────────────────────
 
+  const nonExcludedTxns = useMemo(
+    () => transactions.filter(t => !excludedIds.has(t.id)),
+    [transactions, excludedIds],
+  )
+
   const suggestions = useMemo(
-    () => detectPatterns(transactions, recurring, dismissedKeys),
-    [transactions, recurring, dismissedKeys],
+    () => detectPatterns(nonExcludedTxns, recurring, dismissedKeys),
+    [nonExcludedTxns, recurring, dismissedKeys],
   )
 
   const graphData = useMemo(() => {
-    if (graphMode === 'historical') return buildHistoricalData(transactions, recurring, graphFilter, graphRange)
-    return buildForecastData(transactions, recurring, graphFilter, graphRange)
-  }, [graphMode, graphFilter, graphRange, transactions, recurring])
+    if (graphMode === 'historical') return buildHistoricalData(nonExcludedTxns, recurring, graphFilter, graphRange)
+    return buildForecastData(nonExcludedTxns, recurring, graphFilter, graphRange)
+  }, [graphMode, graphFilter, graphRange, nonExcludedTxns, recurring])
 
   const monthlyAvg = useMemo(() => {
     const nonZero = graphData.filter(d => d.amount > 0)
@@ -751,11 +760,11 @@ export default function RecurringTransactions() {
   const recurringSmartAmounts = useMemo(() => {
     const map = new Map<string, number>()
     for (const entry of recurring) {
-      const txns = transactions.filter(t => t.vendor === entry.vendor && t.category_id === entry.category_id)
+      const txns = nonExcludedTxns.filter(t => t.vendor === entry.vendor && t.category_id === entry.category_id)
       map.set(`${entry.vendor}|||${entry.category_id ?? ''}`, computeSmartAmount(txns, entry.cadence))
     }
     return map
-  }, [recurring, transactions])
+  }, [recurring, nonExcludedTxns])
 
   const displayedRecurring = useMemo(() => {
     const base = cadenceFilter ? recurring.filter(r => r.cadence === cadenceFilter) : recurring
@@ -770,7 +779,7 @@ export default function RecurringTransactions() {
 
   function getEntryTransactions(entry: RecurringEntry): Transaction[] {
     return transactions
-      .filter(t => t.vendor === entry.vendor && t.category_id === entry.category_id)
+      .filter(t => t.vendor === entry.vendor && t.category_id === entry.category_id && !excludedIds.has(t.id))
       .sort((a, b) => b.date.localeCompare(a.date))
   }
 
@@ -808,6 +817,14 @@ export default function RecurringTransactions() {
   async function handleDelete(id: string) {
     await supabase.from('recurring_transactions').delete().eq('id', id)
     load()
+  }
+
+  async function handleExclude(txId: string) {
+    const { error } = await supabase.from('recurring_exclusions').insert({ transaction_id: txId })
+    if (!error) {
+      setExcludedIds(prev => new Set([...prev, txId]))
+      setPendingExclude(null)
+    }
   }
 
   // ── Render ───────────────────────────────────────────────────────────────────
@@ -1060,17 +1077,61 @@ export default function RecurringTransactions() {
                           <tr>
                             <th style={{ textAlign: 'left', padding: '4px 8px', color: 'var(--color-text-muted)', fontWeight: 600, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Date</th>
                             <th style={{ textAlign: 'right', padding: '4px 8px', color: 'var(--color-text-muted)', fontWeight: 600, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Amount</th>
+                            <th style={{ width: '32px' }} />
                           </tr>
                         </thead>
                         <tbody>
-                          {visibleTxns.map(t => (
-                            <tr key={t.id} onClick={() => setDetailTx({ ...t, categoryName: t.category_id ? catMap.get(t.category_id)?.name ?? null : null })} style={{ cursor: 'pointer' }}>
-                              <td style={{ padding: '6px 8px', color: 'var(--color-text-muted)' }}>{formatDate(t.date)}</td>
-                              <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 500, color: 'var(--color-primary-text)', fontVariantNumeric: 'tabular-nums' }}>
-                                {currencySymbol}{formatAmount(t.amount)}
-                              </td>
-                            </tr>
-                          ))}
+                          {visibleTxns.map(t => {
+                            const isPending = pendingExclude === t.id
+                            if (isPending) {
+                              return (
+                                <tr key={t.id} style={{ background: 'rgba(224,107,107,0.04)' }}>
+                                  <td colSpan={3} style={{ padding: '7px 8px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                      <span style={{ flex: 1, fontSize: '12px', color: 'var(--color-text)' }}>
+                                        Remove {formatDate(t.date)} · {currencySymbol}{formatAmount(t.amount)} from this group?
+                                      </span>
+                                      <button
+                                        onClick={() => handleExclude(t.id)}
+                                        style={{ ...s.btn('dismiss'), fontSize: '12px', padding: '3px 10px', borderColor: 'var(--color-expense)', color: 'var(--color-expense)' }}
+                                      >
+                                        Confirm
+                                      </button>
+                                      <button
+                                        onClick={() => setPendingExclude(null)}
+                                        style={{ ...s.btn('ghost'), fontSize: '12px', padding: '3px 10px' }}
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )
+                            }
+                            return (
+                              <tr
+                                key={t.id}
+                                onClick={() => setDetailTx({ ...t, categoryName: t.category_id ? catMap.get(t.category_id)?.name ?? null : null })}
+                                style={{ cursor: 'pointer' }}
+                              >
+                                <td style={{ padding: '6px 8px', color: 'var(--color-text-muted)' }}>{formatDate(t.date)}</td>
+                                <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 500, color: 'var(--color-primary-text)', fontVariantNumeric: 'tabular-nums' }}>
+                                  {currencySymbol}{formatAmount(t.amount)}
+                                </td>
+                                <td style={{ padding: '6px 4px', textAlign: 'right' }}>
+                                  <button
+                                    title="Remove from recurring group"
+                                    onClick={e => { e.stopPropagation(); setPendingExclude(t.id) }}
+                                    style={{ fontFamily: 'inherit', fontSize: '14px', lineHeight: 1, background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', opacity: 0.4, padding: '0 2px', borderRadius: '4px' }}
+                                    onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+                                    onMouseLeave={e => (e.currentTarget.style.opacity = '0.4')}
+                                  >
+                                    ⊖
+                                  </button>
+                                </td>
+                              </tr>
+                            )
+                          })}
                         </tbody>
                       </table>
                       {allEntryTxns.length > ENTRY_LIMIT && (
