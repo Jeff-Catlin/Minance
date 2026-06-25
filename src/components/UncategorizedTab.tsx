@@ -62,6 +62,28 @@ const s = {
     maxWidth: '180px',
   } as React.CSSProperties,
 
+  filterInput: {
+    fontFamily: 'inherit',
+    fontSize: '13px',
+    padding: '6px 10px',
+    borderRadius: '8px',
+    border: '1px solid var(--color-border)',
+    background: 'var(--color-bg)',
+    color: 'var(--color-text)',
+    outline: 'none',
+  } as React.CSSProperties,
+
+  filterSelect: {
+    fontFamily: 'inherit',
+    fontSize: '13px',
+    padding: '6px 10px',
+    borderRadius: '8px',
+    border: '1px solid var(--color-border)',
+    background: 'var(--color-bg)',
+    color: 'var(--color-text)',
+    cursor: 'pointer',
+  } as React.CSSProperties,
+
   btn: (variant: 'primary' | 'ghost' | 'split') => ({
     fontFamily: 'inherit',
     fontSize: '12px',
@@ -124,6 +146,10 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
   const [accounts, setAccounts] = useState<Account[]>([])
   const [accountsMap, setAccountsMap] = useState<Map<string, Account>>(new Map())
   const [filterAccount, setFilterAccount] = useState('')
+  const [search, setSearch] = useState('')
+  const [filterType, setFilterType] = useState('')
+  const [filterFrom, setFilterFrom] = useState('')
+  const [filterTo, setFilterTo] = useState('')
   const [splitModal, setSplitModal] = useState<{ tx: Transaction; splits: TransactionSplit[] } | null>(null)
   const [editingTx, setEditingTx] = useState<Transaction | null>(null)
   const [detailTx, setDetailTx] = useState<Transaction | null>(null)
@@ -248,11 +274,26 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
 
   if (loading) return <p style={{ color: 'var(--color-text-muted)' }}>Loading…</p>
 
-  const displayed = filterAccount === '__no_account__'
-    ? transactions.filter(t => t.account_id === null)
-    : filterAccount
-      ? transactions.filter(t => t.account_id === filterAccount)
-      : transactions
+  const hasFilters = search || filterType || filterFrom || filterTo || filterAccount
+
+  function clearFilters() {
+    setSearch('')
+    setFilterType('')
+    setFilterFrom('')
+    setFilterTo('')
+    setFilterAccount('')
+  }
+
+  const displayed = transactions.filter(t => {
+    const q = search.toLowerCase()
+    if (q && !t.vendor.toLowerCase().includes(q) && !(t.description ?? '').toLowerCase().includes(q)) return false
+    if (filterType && t.type !== filterType) return false
+    if (filterFrom && t.date < filterFrom) return false
+    if (filterTo && t.date > filterTo) return false
+    if (filterAccount === '__no_account__') { if (t.account_id !== null) return false }
+    else if (filterAccount && t.account_id !== filterAccount) return false
+    return true
+  })
   const allSelected = selected.size === displayed.length && displayed.length > 0
 
   return (
@@ -267,14 +308,21 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
         </span>
       </div>
 
-      {/* Account filter */}
-      {accounts.length > 0 && (
-        <div style={{ marginBottom: '12px' }}>
-          <select
-            style={{ ...s.select, maxWidth: '220px' }}
-            value={filterAccount}
-            onChange={e => setFilterAccount(e.target.value)}
-          >
+      {/* Filter bar */}
+      <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap' }}>
+        <input
+          style={{ ...s.filterInput, width: '150px', flexShrink: 0 }}
+          placeholder="Search vendor…"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+        />
+        <select style={{ ...s.filterSelect, flexShrink: 0 }} value={filterType} onChange={e => setFilterType(e.target.value)}>
+          <option value="">All types</option>
+          <option value="expense">Expenses</option>
+          <option value="income">Income</option>
+        </select>
+        {accounts.length > 0 && (
+          <select style={{ ...s.filterSelect, flexShrink: 0 }} value={filterAccount} onChange={e => setFilterAccount(e.target.value)}>
             <option value="">All accounts</option>
             <option value="__no_account__">No account assigned</option>
             {accounts.map(a => (
@@ -283,8 +331,26 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
               </option>
             ))}
           </select>
-        </div>
-      )}
+        )}
+        <input
+          style={{ ...s.filterInput, width: '118px', flexShrink: 0 }}
+          type="date" title="From date"
+          value={filterFrom}
+          onChange={e => setFilterFrom(e.target.value)}
+        />
+        <span style={{ color: 'var(--color-text-muted)', fontSize: '13px', flexShrink: 0 }}>–</span>
+        <input
+          style={{ ...s.filterInput, width: '118px', flexShrink: 0 }}
+          type="date" title="To date"
+          value={filterTo}
+          onChange={e => setFilterTo(e.target.value)}
+        />
+        {hasFilters && (
+          <button style={{ ...s.btn('ghost'), fontSize: '12px', padding: '4px 10px', flexShrink: 0 }} onClick={clearFilters}>
+            Clear
+          </button>
+        )}
+      </div>
 
       {/* Bulk assign bar */}
       {selected.size > 0 && (
