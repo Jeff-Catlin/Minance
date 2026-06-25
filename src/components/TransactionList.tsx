@@ -161,6 +161,8 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
   const [filterFrom, setFilterFrom] = useState(initialFilter?.from ?? '')
   const [filterTo, setFilterTo] = useState(initialFilter?.to ?? '')
   const [filterAccount, setFilterAccount] = useState(initialFilter?.accountId ?? '')
+  const [filterAmountMin, setFilterAmountMin] = useState('')
+  const [filterAmountMax, setFilterAmountMax] = useState('')
 
   async function load() {
     const [{ data: txns }, { data: cats }, { data: splits }, { data: accts }, { data: recur }] = await Promise.all([
@@ -266,11 +268,14 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
         if (filterAccount === '__no_account__') { if (t.account_id !== null) return false }
         else if (t.account_id !== filterAccount) return false
       }
+      const absAmt = Math.abs(t.amount)
+      if (filterAmountMin !== '' && absAmt < parseFloat(filterAmountMin)) return false
+      if (filterAmountMax !== '' && absAmt > parseFloat(filterAmountMax)) return false
       return true
     })
-  }, [transactions, search, filterCategory, matchingCategoryIds, filterType, filterFrom, filterTo, filterAccount, splitsMap])
+  }, [transactions, search, filterCategory, matchingCategoryIds, filterType, filterFrom, filterTo, filterAccount, filterAmountMin, filterAmountMax, splitsMap])
 
-  const hasFilters = search || filterCategory || filterType || filterFrom || filterTo || filterAccount
+  const hasFilters = search || filterCategory || filterType || filterFrom || filterTo || filterAccount || filterAmountMin || filterAmountMax
 
   // Net financial impact of filtered set (income adds, expense subtracts, signed amounts handled correctly)
   const filteredTotal = hasFilters
@@ -297,6 +302,8 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
     setFilterFrom('')
     setFilterTo('')
     setFilterAccount('')
+    setFilterAmountMin('')
+    setFilterAmountMax('')
     setSelectedIds(new Set())
   }
 
@@ -411,6 +418,28 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
           title="To date"
           value={filterTo}
           onChange={e => setFilterTo(e.target.value)}
+        />
+
+        <input
+          style={{ ...s.filterInput, width: '90px', flexShrink: 0 }}
+          type="number"
+          min="0"
+          step="0.01"
+          placeholder="Min $"
+          title="Minimum amount"
+          value={filterAmountMin}
+          onChange={e => setFilterAmountMin(e.target.value)}
+        />
+        <span style={{ color: 'var(--color-text-muted)', fontSize: '13px', flexShrink: 0 }}>–</span>
+        <input
+          style={{ ...s.filterInput, width: '90px', flexShrink: 0 }}
+          type="number"
+          min="0"
+          step="0.01"
+          placeholder="Max $"
+          title="Maximum amount"
+          value={filterAmountMax}
+          onChange={e => setFilterAmountMax(e.target.value)}
         />
 
         {hasFilters && (

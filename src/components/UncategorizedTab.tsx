@@ -150,6 +150,8 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
   const [filterType, setFilterType] = useState('')
   const [filterFrom, setFilterFrom] = useState('')
   const [filterTo, setFilterTo] = useState('')
+  const [filterAmountMin, setFilterAmountMin] = useState('')
+  const [filterAmountMax, setFilterAmountMax] = useState('')
   const [splitModal, setSplitModal] = useState<{ tx: Transaction; splits: TransactionSplit[] } | null>(null)
   const [editingTx, setEditingTx] = useState<Transaction | null>(null)
   const [detailTx, setDetailTx] = useState<Transaction | null>(null)
@@ -274,7 +276,7 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
 
   if (loading) return <p style={{ color: 'var(--color-text-muted)' }}>Loading…</p>
 
-  const hasFilters = search || filterType || filterFrom || filterTo || filterAccount
+  const hasFilters = search || filterType || filterFrom || filterTo || filterAccount || filterAmountMin || filterAmountMax
 
   function clearFilters() {
     setSearch('')
@@ -282,6 +284,8 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
     setFilterFrom('')
     setFilterTo('')
     setFilterAccount('')
+    setFilterAmountMin('')
+    setFilterAmountMax('')
   }
 
   const displayed = transactions.filter(t => {
@@ -292,6 +296,9 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
     if (filterTo && t.date > filterTo) return false
     if (filterAccount === '__no_account__') { if (t.account_id !== null) return false }
     else if (filterAccount && t.account_id !== filterAccount) return false
+    const absAmt = Math.abs(t.amount)
+    if (filterAmountMin !== '' && absAmt < parseFloat(filterAmountMin)) return false
+    if (filterAmountMax !== '' && absAmt > parseFloat(filterAmountMax)) return false
     return true
   })
   const allSelected = selected.size === displayed.length && displayed.length > 0
@@ -364,6 +371,27 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
           type="date" title="To date"
           value={filterTo}
           onChange={e => setFilterTo(e.target.value)}
+        />
+        <input
+          style={{ ...s.filterInput, width: '90px', flexShrink: 0 }}
+          type="number"
+          min="0"
+          step="0.01"
+          placeholder="Min $"
+          title="Minimum amount"
+          value={filterAmountMin}
+          onChange={e => setFilterAmountMin(e.target.value)}
+        />
+        <span style={{ color: 'var(--color-text-muted)', fontSize: '13px', flexShrink: 0 }}>–</span>
+        <input
+          style={{ ...s.filterInput, width: '90px', flexShrink: 0 }}
+          type="number"
+          min="0"
+          step="0.01"
+          placeholder="Max $"
+          title="Maximum amount"
+          value={filterAmountMax}
+          onChange={e => setFilterAmountMax(e.target.value)}
         />
         {hasFilters && (
           <button style={{ ...s.btn('ghost'), fontSize: '12px', padding: '4px 10px', flexShrink: 0 }} onClick={clearFilters}>
