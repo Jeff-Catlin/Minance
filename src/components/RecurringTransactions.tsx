@@ -224,17 +224,32 @@ function buildForecastData(
       }
       if (!hits) continue
 
-      // Project amount:
-      // 1. If same month exists in prior year → use that (handles seasonal variation e.g. utilities)
-      // 2. Otherwise → average of all historical transactions for this entry
-      const priorYear = year - 1
-      const priorFrom = `${priorYear}-${String(month + 1).padStart(2, '0')}-01`
-      const priorTo   = `${priorYear}-${String(month + 1).padStart(2, '0')}-${String(new Date(priorYear, month + 1, 0).getDate()).padStart(2, '0')}`
-      const sameMonthPriorYear = matches.filter(t => t.date >= priorFrom && t.date <= priorTo)
+      // Project amount using variance-aware logic:
+      // Coefficient of variation (std dev / mean) tells us if this is flat-fee or seasonal.
+      // Low CV  (<15%) → flat fee → use recent average (captures price increases)
+      // High CV (≥15%) → seasonal → use prior-year same month → overall average fallback
+      const allAmounts  = matches.map(t => t.amount)
+      const avgAll      = allAmounts.reduce((s, a) => s + a, 0) / allAmounts.length
+      const stdDev      = allAmounts.length > 1
+        ? Math.sqrt(allAmounts.map(a => Math.pow(a - avgAll, 2)).reduce((s, v) => s + v, 0) / allAmounts.length)
+        : 0
+      const cv          = avgAll > 0 ? stdDev / avgAll : 0
 
-      const projAmount = sameMonthPriorYear.length > 0
-        ? sameMonthPriorYear.reduce((s, t) => s + t.amount, 0) / sameMonthPriorYear.length
-        : matches.reduce((s, t) => s + t.amount, 0) / matches.length
+      let projAmount: number
+      if (cv < 0.15) {
+        // Flat fee — recent average picks up price changes faster than historical average
+        const recentN   = Math.min(3, matches.length)
+        projAmount      = matches.slice(0, recentN).reduce((s, t) => s + t.amount, 0) / recentN
+      } else {
+        // Seasonal — try prior-year same month, fall back to overall average
+        const priorYear = year - 1
+        const priorFrom = `${priorYear}-${String(month + 1).padStart(2, '0')}-01`
+        const priorTo   = `${priorYear}-${String(month + 1).padStart(2, '0')}-${String(new Date(priorYear, month + 1, 0).getDate()).padStart(2, '0')}`
+        const priorTxns = matches.filter(t => t.date >= priorFrom && t.date <= priorTo)
+        projAmount      = priorTxns.length > 0
+          ? priorTxns.reduce((s, t) => s + t.amount, 0) / priorTxns.length
+          : avgAll
+      }
 
       breakdown.push({ name: r.vendor, amount: projAmount })
     }
