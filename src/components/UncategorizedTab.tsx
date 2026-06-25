@@ -372,7 +372,7 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
           <option value="income">Income</option>
         </select>
         {accounts.length > 0 && (
-          <select style={{ ...s.filterSelect, flexShrink: 0 }} value={filterAccount} onChange={e => setFilterAccount(e.target.value)}>
+          <select style={{ ...s.filterSelect, flexShrink: 0, maxWidth: '150px' }} value={filterAccount} onChange={e => setFilterAccount(e.target.value)}>
             <option value="">All accounts</option>
             <option value="__no_account__">No account assigned</option>
             {accounts.map(a => (
