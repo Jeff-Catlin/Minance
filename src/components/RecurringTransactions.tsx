@@ -212,19 +212,31 @@ function buildForecastData(
         .sort((a, b) => b.date.localeCompare(a.date))
       if (matches.length === 0) continue
 
+      // Determine if this entry hits the target month based on cadence
       const lastDate = new Date(matches[0].date)
-      const lastAmount = matches[0].amount
       const intervalMonths = CADENCE_MONTHS[r.cadence]
-
+      let hits = false
       let proj = new Date(lastDate)
       for (let n = 1; n <= 24; n++) {
         proj = new Date(proj.getFullYear(), proj.getMonth() + intervalMonths, proj.getDate())
-        if (proj.getFullYear() === year && proj.getMonth() === month) {
-          breakdown.push({ name: r.vendor, amount: lastAmount })
-          break
-        }
+        if (proj.getFullYear() === year && proj.getMonth() === month) { hits = true; break }
         if (proj.getFullYear() > year || (proj.getFullYear() === year && proj.getMonth() > month)) break
       }
+      if (!hits) continue
+
+      // Project amount:
+      // 1. If same month exists in prior year → use that (handles seasonal variation e.g. utilities)
+      // 2. Otherwise → average of all historical transactions for this entry
+      const priorYear = year - 1
+      const priorFrom = `${priorYear}-${String(month + 1).padStart(2, '0')}-01`
+      const priorTo   = `${priorYear}-${String(month + 1).padStart(2, '0')}-${String(new Date(priorYear, month + 1, 0).getDate()).padStart(2, '0')}`
+      const sameMonthPriorYear = matches.filter(t => t.date >= priorFrom && t.date <= priorTo)
+
+      const projAmount = sameMonthPriorYear.length > 0
+        ? sameMonthPriorYear.reduce((s, t) => s + t.amount, 0) / sameMonthPriorYear.length
+        : matches.reduce((s, t) => s + t.amount, 0) / matches.length
+
+      breakdown.push({ name: r.vendor, amount: projAmount })
     }
 
     breakdown.sort((a, b) => b.amount - a.amount)
