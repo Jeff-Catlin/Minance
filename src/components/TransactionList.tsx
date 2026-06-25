@@ -156,6 +156,7 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
 
   // Filters — initialized from drilldown if provided
   const [search, setSearch] = useState('')
+  const [filterDescription, setFilterDescription] = useState('')
   const [filterCategory, setFilterCategory] = useState(initialFilter?.categoryId ?? '')
   const [filterType, setFilterType] = useState(initialFilter?.type ?? '')
   const [filterFrom, setFilterFrom] = useState(initialFilter?.from ?? '')
@@ -262,7 +263,8 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
     return transactions.filter(t => {
-      if (q && !t.vendor.toLowerCase().includes(q) && !(t.description ?? '').toLowerCase().includes(q)) return false
+      if (q && !t.vendor.toLowerCase().includes(q)) return false
+      if (filterDescription && !(t.description ?? '').toLowerCase().includes(filterDescription.toLowerCase())) return false
       if (filterCategory) {
         if (filterCategory === '__none__') {
           if (t.category_id || t.is_split) return false
@@ -295,9 +297,9 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
       }
       return true
     })
-  }, [transactions, search, filterCategory, matchingCategoryIds, filterType, filterFrom, filterTo, filterAccount, filterAmountMode, filterAmountValue, filterAmountMax, splitsMap])
+  }, [transactions, search, filterDescription, filterCategory, matchingCategoryIds, filterType, filterFrom, filterTo, filterAccount, filterAmountMode, filterAmountValue, filterAmountMax, splitsMap])
 
-  const hasFilters = search || filterCategory || filterType || filterFrom || filterTo || filterAccount || filterAmountValue
+  const hasFilters = search || filterDescription || filterCategory || filterType || filterFrom || filterTo || filterAccount || filterAmountValue
 
   // Net financial impact of filtered set (income adds, expense subtracts, signed amounts handled correctly)
   const filteredTotal = hasFilters
@@ -319,6 +321,7 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
 
   function clearFilters() {
     setSearch('')
+    setFilterDescription('')
     setFilterCategory('')
     setFilterType('')
     setFilterFrom('')
@@ -493,6 +496,13 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
             </>
           )}
         </div>
+
+        <input
+          style={{ ...s.filterInput, width: '150px', flexShrink: 0 }}
+          placeholder="Search description…"
+          value={filterDescription}
+          onChange={e => setFilterDescription(e.target.value)}
+        />
 
         {hasFilters && (
           <button style={{ ...s.clearBtn, flexShrink: 0 }} onClick={clearFilters}>Clear</button>

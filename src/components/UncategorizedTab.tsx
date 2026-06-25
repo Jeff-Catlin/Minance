@@ -147,6 +147,7 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
   const [accountsMap, setAccountsMap] = useState<Map<string, Account>>(new Map())
   const [filterAccount, setFilterAccount] = useState('')
   const [search, setSearch] = useState('')
+  const [filterDescription, setFilterDescription] = useState('')
   const [filterType, setFilterType] = useState('')
   const [filterFrom, setFilterFrom] = useState('')
   const [filterTo, setFilterTo] = useState('')
@@ -290,10 +291,11 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
 
   if (loading) return <p style={{ color: 'var(--color-text-muted)' }}>Loading…</p>
 
-  const hasFilters = search || filterType || filterFrom || filterTo || filterAccount || filterAmountValue
+  const hasFilters = search || filterDescription || filterType || filterFrom || filterTo || filterAccount || filterAmountValue
 
   function clearFilters() {
     setSearch('')
+    setFilterDescription('')
     setFilterType('')
     setFilterFrom('')
     setFilterTo('')
@@ -305,7 +307,8 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
 
   const displayed = transactions.filter(t => {
     const q = search.toLowerCase()
-    if (q && !t.vendor.toLowerCase().includes(q) && !(t.description ?? '').toLowerCase().includes(q)) return false
+    if (q && !t.vendor.toLowerCase().includes(q)) return false
+    if (filterDescription && !(t.description ?? '').toLowerCase().includes(filterDescription.toLowerCase())) return false
     if (filterType && t.type !== filterType) return false
     if (filterFrom && t.date < filterFrom) return false
     if (filterTo && t.date > filterTo) return false
@@ -444,6 +447,13 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
             </>
           )}
         </div>
+        <input
+          style={{ ...s.filterInput, width: '150px', flexShrink: 0 }}
+          placeholder="Search description…"
+          value={filterDescription}
+          onChange={e => setFilterDescription(e.target.value)}
+        />
+
         {hasFilters && (
           <button style={{ ...s.btn('ghost'), fontSize: '12px', padding: '4px 10px', flexShrink: 0 }} onClick={clearFilters}>
             Clear
