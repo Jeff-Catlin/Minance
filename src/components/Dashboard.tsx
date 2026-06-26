@@ -519,8 +519,15 @@ export default function Dashboard({ onDrillDown, onUncatDrillDown }: DashboardPr
         const directTotal = getCategoryTotal(parent.id, type)
         const parentTotal = directTotal + childRows.reduce((s, c) => s + c.total, 0)
 
+        const displayChildren = [
+          ...childRows,
+          ...(childRows.length > 0 && Math.abs(directTotal) >= 0.005
+            ? [{ id: `${parent.id}--direct`, name: `${parent.name} (direct)`, total: directTotal }]
+            : []),
+        ]
+
         if (Math.abs(parentTotal) >= 0.005) {
-          rows.push({ parentId: parent.id, parentName: parent.name, parentTotal, directTotal, children: childRows })
+          rows.push({ parentId: parent.id, parentName: parent.name, parentTotal, directTotal, children: displayChildren })
         }
       }
 
@@ -637,17 +644,24 @@ export default function Dashboard({ onDrillDown, onUncatDrillDown }: DashboardPr
                   </td>
                 </tr>
                 {expanded.has(row.parentId) && row.children.map(child => {
-                  const childCat = catMap.get(child.id)
-                  const scaledChildBudget = budgetMultiplier && childCat?.monthly_budget != null
+                  const isDirect = child.id.endsWith('--direct')
+                  const childCat = isDirect ? null : catMap.get(child.id)
+                  const scaledChildBudget = !isDirect && budgetMultiplier && childCat?.monthly_budget != null
                     ? childCat.monthly_budget * budgetMultiplier : null
                   return (
                     <tr key={child.id}>
                       <td style={s.childTd()}>
-                        <DrillLink
-                          name={child.name}
-                          onClick={onDrillDown ? () => onDrillDown(child.id, range.from, range.to, isIncome ? 'income' : 'expense') : undefined}
-                        />
-                        {renderBudgetBar(child.total, scaledChildBudget, isIncome)}
+                        {isDirect ? (
+                          <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>{child.name}</span>
+                        ) : (
+                          <>
+                            <DrillLink
+                              name={child.name}
+                              onClick={onDrillDown ? () => onDrillDown(child.id, range.from, range.to, isIncome ? 'income' : 'expense') : undefined}
+                            />
+                            {renderBudgetBar(child.total, scaledChildBudget, isIncome)}
+                          </>
+                        )}
                       </td>
                       <td style={{ ...s.childTd(child.total < 0 ? 'var(--color-income)' : color), textAlign: 'right', fontVariantNumeric: 'tabular-nums', opacity: 0.8, verticalAlign: 'top' }}>
                         {child.total < 0 ? '−' : ''}{currencySymbol}{formatAmount(Math.abs(child.total))}
@@ -660,18 +674,6 @@ export default function Dashboard({ onDrillDown, onUncatDrillDown }: DashboardPr
                     </tr>
                   )
                 })}
-                {expanded.has(row.parentId) && Math.abs(row.directTotal) >= 0.005 && (
-                  <tr key={`${row.parentId}-direct`}>
-                    <td style={s.childTd()}>
-                      <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
-                        {row.parentName} (direct)
-                      </span>
-                    </td>
-                    <td style={{ ...s.childTd(row.directTotal < 0 ? 'var(--color-income)' : color), textAlign: 'right', fontVariantNumeric: 'tabular-nums', opacity: 0.8 }}>
-                      {row.directTotal < 0 ? '−' : ''}{currencySymbol}{formatAmount(Math.abs(row.directTotal))}
-                    </td>
-                  </tr>
-                )}
               </Fragment>
             )
           })}
