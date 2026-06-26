@@ -347,39 +347,42 @@ function BarChart({ data, sym }: { data: BarPoint[]; sym: string }) {
   const hoveredBar = hovered !== null ? data[hovered] : null
 
   return (
-    <div style={{ position: 'relative', overflowX: 'auto' }}>
-      <svg
-        width={totalW}
-        height={BAR_H + 24}
-        style={{ display: 'block', minWidth: '100%', overflow: 'visible' }}
-      >
-        {data.map((d, i) => {
-          const barH = d.amount > 0 ? Math.max((d.amount / max) * BAR_H, 4) : 0
-          const x = i * (BAR_W + GAP)
-          const isHov = hovered === i
-          return (
-            <g
-              key={d.label}
-              onMouseEnter={() => setHovered(i)}
-              onMouseLeave={() => setHovered(null)}
-              style={{ cursor: 'default' }}
-            >
-              <rect
-                x={x} y={barH > 0 ? BAR_H - barH : BAR_H - 2}
-                width={BAR_W} height={barH > 0 ? barH : 2}
-                fill={isHov ? 'var(--color-primary-text)' : barH > 0 ? 'var(--color-primary)' : 'var(--color-border)'}
-                rx={3} opacity={d.amount === 0 ? 0.3 : 1}
-              />
-              <text x={x + BAR_W / 2} y={BAR_H + 16} textAnchor="middle" fontSize={9}
-                fill={isHov ? 'var(--color-primary-text)' : 'var(--color-text-muted)'} fontFamily="inherit">
-                {d.label}
-              </text>
-            </g>
-          )
-        })}
-      </svg>
+    <div style={{ position: 'relative' }}>
+      {/* Scrollable bar area */}
+      <div style={{ overflowX: 'auto' }}>
+        <svg
+          width={totalW}
+          height={BAR_H + 24}
+          style={{ display: 'block', minWidth: '100%', overflow: 'visible' }}
+        >
+          {data.map((d, i) => {
+            const barH = d.amount > 0 ? Math.max((d.amount / max) * BAR_H, 4) : 0
+            const x = i * (BAR_W + GAP)
+            const isHov = hovered === i
+            return (
+              <g
+                key={d.label}
+                onMouseEnter={() => setHovered(i)}
+                onMouseLeave={() => setHovered(null)}
+                style={{ cursor: 'default' }}
+              >
+                <rect
+                  x={x} y={barH > 0 ? BAR_H - barH : BAR_H - 2}
+                  width={BAR_W} height={barH > 0 ? barH : 2}
+                  fill={isHov ? 'var(--color-primary-text)' : barH > 0 ? 'var(--color-primary)' : 'var(--color-border)'}
+                  rx={3} opacity={d.amount === 0 ? 0.3 : 1}
+                />
+                <text x={x + BAR_W / 2} y={BAR_H + 16} textAnchor="middle" fontSize={9}
+                  fill={isHov ? 'var(--color-primary-text)' : 'var(--color-text-muted)'} fontFamily="inherit">
+                  {d.label}
+                </text>
+              </g>
+            )
+          })}
+        </svg>
+      </div>
 
-      {/* Hover tooltip — pinned to the right of the chart so it never overlaps bars */}
+      {/* Hover tooltip — outside the scroll container so it can extend freely downward */}
       {hoveredBar && hovered !== null && (
         <div style={{
           position: 'absolute',
@@ -674,7 +677,7 @@ function AddRecurringModal({ categoryOptions, uniqueVendors, onSave, onClose }: 
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function RecurringTransactions() {
+export default function RecurringTransactions({ typeFilter }: { typeFilter: 'expense' | 'income' }) {
   const { currencySymbol } = useSettings()
   const [recurring, setRecurring] = useState<RecurringEntry[]>([])
   const [transactions, setTransactions] = useState<Transaction[]>([])
@@ -722,9 +725,24 @@ export default function RecurringTransactions() {
   // ── Derived data ─────────────────────────────────────────────────────────────
 
   const nonExcludedTxns = useMemo(
-    () => transactions.filter(t => !excludedIds.has(t.id)),
-    [transactions, excludedIds],
+    () => transactions.filter(t => !excludedIds.has(t.id) && (
+      typeFilter === 'expense' ? (t.type === 'expense' || t.type === 'card_payment') : t.type === 'income'
+    )),
+    [transactions, excludedIds, typeFilter],
   )
+
+  const typeFilteredRecurring = useMemo(() => {
+    const keyTypes = new Map<string, string>()
+    for (const t of transactions) {
+      const key = `${t.vendor}|||${t.category_id ?? ''}`
+      if (!keyTypes.has(key)) keyTypes.set(key, t.type)
+    }
+    return recurring.filter(r => {
+      const type = keyTypes.get(`${r.vendor}|||${r.category_id ?? ''}`)
+      if (type == null) return typeFilter === 'expense'
+      return typeFilter === 'expense' ? (type === 'expense' || type === 'card_payment') : type === 'income'
+    })
+  }, [recurring, transactions, typeFilter])
 
   const suggestions = useMemo(
     () => detectPatterns(nonExcludedTxns, recurring, dismissedKeys),
@@ -732,9 +750,9 @@ export default function RecurringTransactions() {
   )
 
   const graphData = useMemo(() => {
-    if (graphMode === 'historical') return buildHistoricalData(nonExcludedTxns, recurring, graphFilter, graphRange)
-    return buildForecastData(nonExcludedTxns, recurring, graphFilter, graphRange)
-  }, [graphMode, graphFilter, graphRange, nonExcludedTxns, recurring])
+    if (graphMode === 'historical') return buildHistoricalData(nonExcludedTxns, typeFilteredRecurring, graphFilter, graphRange)
+    return buildForecastData(nonExcludedTxns, typeFilteredRecurring, graphFilter, graphRange)
+  }, [graphMode, graphFilter, graphRange, nonExcludedTxns, typeFilteredRecurring])
 
   const monthlyAvg = useMemo(() => {
     const nonZero = graphData.filter(d => d.amount > 0)
@@ -760,15 +778,15 @@ export default function RecurringTransactions() {
 
   const recurringSmartAmounts = useMemo(() => {
     const map = new Map<string, number>()
-    for (const entry of recurring) {
+    for (const entry of typeFilteredRecurring) {
       const txns = nonExcludedTxns.filter(t => t.vendor === entry.vendor && t.category_id === entry.category_id)
       map.set(`${entry.vendor}|||${entry.category_id ?? ''}`, computeSmartAmount(txns, entry.cadence))
     }
     return map
-  }, [recurring, nonExcludedTxns])
+  }, [typeFilteredRecurring, nonExcludedTxns])
 
   const displayedRecurring = useMemo(() => {
-    const base = cadenceFilter ? recurring.filter(r => r.cadence === cadenceFilter) : recurring
+    const base = cadenceFilter ? typeFilteredRecurring.filter(r => r.cadence === cadenceFilter) : typeFilteredRecurring
     return [...base].sort((a, b) => {
       const cadenceDiff = CADENCE_ORDER[a.cadence] - CADENCE_ORDER[b.cadence]
       if (cadenceDiff !== 0) return cadenceDiff
@@ -776,7 +794,7 @@ export default function RecurringTransactions() {
       const bAmt = recurringSmartAmounts.get(`${b.vendor}|||${b.category_id ?? ''}`) ?? 0
       return bAmt - aAmt
     })
-  }, [cadenceFilter, recurring, recurringSmartAmounts])
+  }, [cadenceFilter, typeFilteredRecurring, recurringSmartAmounts])
 
   function getEntryTransactions(entry: RecurringEntry): Transaction[] {
     return transactions
@@ -958,8 +976,8 @@ export default function RecurringTransactions() {
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '10px' }}>
             <p style={s.sectionTitle}>
               {graphMode === 'historical'
-                ? `Recurring spend — ${graphRange === 'ytd' ? 'YTD' : graphRange === 1 ? 'this month' : `last ${graphRange} months`}`
-                : `Projected recurring spend — ${graphRange === 'ytd' ? 'rest of year' : graphRange === 1 ? 'next month' : `next ${graphRange} months`}`
+                ? `Recurring ${typeFilter === 'income' ? 'income' : 'spend'} — ${graphRange === 'ytd' ? 'YTD' : graphRange === 1 ? 'this month' : `last ${graphRange} months`}`
+                : `Projected recurring ${typeFilter === 'income' ? 'income' : 'spend'} — ${graphRange === 'ytd' ? 'rest of year' : graphRange === 1 ? 'next month' : `next ${graphRange} months`}`
               }
             </p>
             <p style={{ margin: 0, fontSize: '13px', color: 'var(--color-text-muted)', flexShrink: 0, marginLeft: '12px' }}>

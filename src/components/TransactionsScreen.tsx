@@ -4,7 +4,7 @@ import TransactionList from './TransactionList'
 import RecurringTransactions from './RecurringTransactions'
 import UncategorizedTab from './UncategorizedTab'
 
-type SubTab = 'all' | 'uncategorized' | 'recurring'
+type SubTab = 'all' | 'uncategorized' | 'recurring-expenses' | 'recurring-income'
 
 interface DrillDownFilter {
   categoryId?: string
@@ -20,7 +20,7 @@ interface TransactionsScreenProps {
 }
 
 export default function TransactionsScreen({ initialFilter, filterKey = 0, initialSubTab }: TransactionsScreenProps) {
-  const [subTab, setSubTab] = useState<SubTab>(initialSubTab ?? 'all')
+  const [subTab, setSubTab] = useState<SubTab>((initialSubTab as SubTab) ?? 'all')
   const [uncategorizedCount, setUncategorizedCount] = useState<number | null>(null)
 
   // Fetch count on mount so the badge shows immediately without clicking the tab
@@ -42,7 +42,8 @@ export default function TransactionsScreen({ initialFilter, filterKey = 0, initi
         ? `Uncategorized (${uncategorizedCount})`
         : 'Uncategorized',
     },
-    { key: 'recurring', label: () => 'Recurring' },
+    { key: 'recurring-expenses', label: () => 'Recurring Expenses' },
+    { key: 'recurring-income', label: () => 'Recurring Income' },
   ]
 
   return (
@@ -90,7 +91,8 @@ export default function TransactionsScreen({ initialFilter, filterKey = 0, initi
       {subTab === 'uncategorized' && (
         <UncategorizedTab onCountChange={setUncategorizedCount} />
       )}
-      {subTab === 'recurring' && <RecurringTransactions />}
+      {subTab === 'recurring-expenses' && <RecurringTransactions typeFilter="expense" />}
+      {subTab === 'recurring-income' && <RecurringTransactions typeFilter="income" />}
     </div>
   )
 }
