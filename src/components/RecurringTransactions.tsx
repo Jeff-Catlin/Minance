@@ -612,14 +612,45 @@ function AddRecurringModal({ categoryOptions, transactions, onSave, onClose }: A
     return map
   }, [transactions])
 
+  const categoriesByVendor = useMemo(() => {
+    const map = new Map<string, Set<string>>()
+    for (const t of transactions) {
+      const v = t.vendor.toLowerCase()
+      if (!map.has(v)) map.set(v, new Set())
+      map.get(v)!.add(t.category_id ?? '')
+    }
+    return map
+  }, [transactions])
+
   const filteredVendors = useMemo(() => {
     if (!categoryId) return [...new Set(transactions.map(t => t.vendor))].sort()
     return [...(vendorsByCategory.get(categoryId) ?? [])].sort()
   }, [categoryId, vendorsByCategory, transactions])
 
+  const filteredCategoryOptions = useMemo(() => {
+    const trimmed = vendor.trim().toLowerCase()
+    if (!trimmed) return categoryOptions
+    const validCatIds = categoriesByVendor.get(trimmed) ?? new Set<string>()
+    if (validCatIds.size === 0) return categoryOptions
+    return categoryOptions.filter(opt => validCatIds.has(opt.id))
+  }, [vendor, categoriesByVendor, categoryOptions])
+
   function handleCategoryChange(newCat: string) {
     setCategoryId(newCat)
-    setVendor('')
+    // clear vendor only if it's no longer in the filtered list for the new category
+    if (newCat && vendor) {
+      const available = vendorsByCategory.get(newCat)
+      if (available && !available.has(vendor)) setVendor('')
+    }
+  }
+
+  function handleVendorChange(newVendor: string) {
+    setVendor(newVendor)
+    // clear category only if it's no longer valid for the typed vendor
+    if (categoryId && newVendor.trim()) {
+      const validCatIds = categoriesByVendor.get(newVendor.trim().toLowerCase())
+      if (validCatIds && !validCatIds.has(categoryId)) setCategoryId('')
+    }
   }
 
   function handleCadenceChange(newCadence: string) {
@@ -660,10 +691,17 @@ function AddRecurringModal({ categoryOptions, transactions, onSave, onClose }: A
           Track a regular charge by vendor and category.
         </p>
 
-        <label style={s.modalLabel}>Category</label>
+        <label style={s.modalLabel}>
+          Category
+          {vendor.trim() && filteredCategoryOptions.length < categoryOptions.length && (
+            <span style={{ fontWeight: 400, color: 'var(--color-text-muted)', marginLeft: '6px' }}>
+              ({filteredCategoryOptions.length} used by this vendor)
+            </span>
+          )}
+        </label>
         <select style={s.select} value={categoryId} onChange={e => handleCategoryChange(e.target.value)}>
           <option value="">Uncategorized</option>
-          {categoryOptions.map(opt => (
+          {filteredCategoryOptions.map(opt => (
             <option key={opt.id} value={opt.id}>{opt.indent ? `  ${opt.label}` : opt.label}</option>
           ))}
         </select>
@@ -680,7 +718,7 @@ function AddRecurringModal({ categoryOptions, transactions, onSave, onClose }: A
           list="add-recurring-vendor-list"
           style={s.input}
           value={vendor}
-          onChange={e => setVendor(e.target.value)}
+          onChange={e => handleVendorChange(e.target.value)}
           placeholder={categoryId ? 'Type or pick a vendor…' : 'e.g. Netflix'}
           autoFocus
           onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') onClose() }}
