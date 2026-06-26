@@ -699,7 +699,7 @@ export default function RecurringTransactions({ typeFilter, onSuggestionCount }:
   const [graphFilter, setGraphFilter] = useState<GraphFilter>(new Set())
   const [graphCadenceOpen, setGraphCadenceOpen] = useState(false)
   const graphCadenceRef = useRef<HTMLDivElement>(null)
-  const [graphRange, setGraphRange] = useState<GraphRange>(1)
+  const [graphRange, setGraphRange] = useState<GraphRange>(6)
   const [showAddModal, setShowAddModal] = useState(false)
   const [confirmingKey, setConfirmingKey] = useState<string | null>(null)
   const [confirmErrors, setConfirmErrors] = useState<Map<string, string>>(new Map())
