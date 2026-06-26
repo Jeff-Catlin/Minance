@@ -337,10 +337,10 @@ function formatDate(iso: string) {
 
 // ── Bar Chart ─────────────────────────────────────────────────────────────────
 
-function BarChart({ data, sym }: { data: BarPoint[]; sym: string }) {
+function BarChart({ data, sym, color }: { data: BarPoint[]; sym: string; color: string }) {
   const [hovered, setHovered] = useState<number | null>(null)
   const max = Math.max(...data.map(d => d.amount), 1)
-  const BAR_H = 110
+  const BAR_H = 200
   const BAR_W = 30
   const GAP = 8
   const totalW = data.length * (BAR_W + GAP) - GAP
@@ -352,7 +352,7 @@ function BarChart({ data, sym }: { data: BarPoint[]; sym: string }) {
       <div style={{ overflowX: 'auto' }}>
         <svg
           width={totalW}
-          height={BAR_H + 24}
+          height={BAR_H + 28}
           style={{ display: 'block', minWidth: '100%', overflow: 'visible' }}
         >
           {data.map((d, i) => {
@@ -369,11 +369,11 @@ function BarChart({ data, sym }: { data: BarPoint[]; sym: string }) {
                 <rect
                   x={x} y={barH > 0 ? BAR_H - barH : BAR_H - 2}
                   width={BAR_W} height={barH > 0 ? barH : 2}
-                  fill={isHov ? 'var(--color-primary-text)' : barH > 0 ? 'var(--color-primary)' : 'var(--color-border)'}
-                  rx={3} opacity={d.amount === 0 ? 0.3 : 1}
+                  fill={isHov ? color : barH > 0 ? color : 'var(--color-border)'}
+                  rx={3} opacity={isHov ? 1 : d.amount === 0 ? 0.3 : 0.65}
                 />
-                <text x={x + BAR_W / 2} y={BAR_H + 16} textAnchor="middle" fontSize={9}
-                  fill={isHov ? 'var(--color-primary-text)' : 'var(--color-text-muted)'} fontFamily="inherit">
+                <text x={x + BAR_W / 2} y={BAR_H + 18} textAnchor="middle" fontSize={11}
+                  fill={isHov ? color : 'var(--color-text-muted)'} fontFamily="inherit">
                   {d.label}
                 </text>
               </g>
@@ -400,7 +400,7 @@ function BarChart({ data, sym }: { data: BarPoint[]; sym: string }) {
         }}>
           <div style={{ fontWeight: 600, fontSize: '12px', color: 'var(--color-text)', marginBottom: hoveredBar.breakdown.length > 0 ? '6px' : 0 }}>
             {hoveredBar.label}
-            <span style={{ color: 'var(--color-primary-text)', marginLeft: '6px' }}>
+            <span style={{ color, marginLeft: '6px' }}>
               {sym}{formatAmount(hoveredBar.amount)}
             </span>
           </div>
@@ -985,18 +985,21 @@ export default function RecurringTransactions({ typeFilter }: { typeFilter: 'exp
               <strong style={{ color: 'var(--color-text)' }}>{currencySymbol}{formatAmount(monthlyAvg)}</strong>
             </p>
           </div>
-          <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-            <button style={s.toggleBtn(graphMode === 'historical')} onClick={() => setGraphMode('historical')}>Historical</button>
-            <button style={s.toggleBtn(graphMode === 'forecast')} onClick={() => setGraphMode('forecast')}>Forecast</button>
-            <div style={{ width: '1px', background: 'var(--color-border)', margin: '0 4px' }} />
-            <button style={s.toggleBtn(graphFilter === 'all')} onClick={() => setGraphFilter('all')}>All</button>
-            <button style={s.toggleBtn(graphFilter === 'monthly')} onClick={() => setGraphFilter('monthly')}>Monthly only</button>
-            <div style={{ width: '1px', background: 'var(--color-border)', margin: '0 4px' }} />
-            {([1, 3, 6, 12, 'ytd'] as GraphRange[]).map(r => (
-              <button key={r} style={s.toggleBtn(graphRange === r)} onClick={() => setGraphRange(r)}>
-                {r === 'ytd' ? 'YTD' : r === 1 ? '1M' : r === 3 ? '3M' : r === 6 ? '6M' : '12M'}
-              </button>
-            ))}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+              <button style={s.toggleBtn(graphMode === 'historical')} onClick={() => setGraphMode('historical')}>Historical</button>
+              <button style={s.toggleBtn(graphMode === 'forecast')} onClick={() => setGraphMode('forecast')}>Forecast</button>
+            </div>
+            <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+              <button style={s.toggleBtn(graphFilter === 'all')} onClick={() => setGraphFilter('all')}>All</button>
+              <button style={s.toggleBtn(graphFilter === 'monthly')} onClick={() => setGraphFilter('monthly')}>Monthly only</button>
+              <div style={{ width: '1px', background: 'var(--color-border)', margin: '0 4px' }} />
+              {([1, 3, 6, 12, 'ytd'] as GraphRange[]).map(r => (
+                <button key={r} style={s.toggleBtn(graphRange === r)} onClick={() => setGraphRange(r)}>
+                  {r === 'ytd' ? 'YTD' : r === 1 ? '1M' : r === 3 ? '3M' : r === 6 ? '6M' : '12M'}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -1005,7 +1008,7 @@ export default function RecurringTransactions({ typeFilter }: { typeFilter: 'exp
             No recurring transactions yet — confirm a suggestion or add one manually to see your chart.
           </p>
         ) : (
-          <BarChart data={graphData} sym={currencySymbol} />
+          <BarChart data={graphData} sym={currencySymbol} color={typeFilter === 'expense' ? '#D97706' : 'var(--color-primary)'} />
         )}
       </div>
 
