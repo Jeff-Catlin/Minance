@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Category } from '../types'
 import { useSettings } from '../context/SettingsContext'
+import ProgressBar from './ProgressBar'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -364,16 +365,12 @@ function BudgetInput({ category, onSave }: { category: Category; onSave: (id: st
 function BudgetBar({ spent, budget, isIncome }: { spent: number; budget: number | null; isIncome: boolean }) {
   const { currencySymbol } = useSettings()
   const hasBudget = budget !== null && budget > 0
-  const pct = hasBudget ? Math.min((spent / budget!) * 100, 100) : 0
   const over = hasBudget && (isIncome ? spent < budget! : spent > budget!)
-  const fill = hasBudget ? (over ? 'var(--color-expense)' : 'var(--color-income)') : 'var(--color-border)'
   const diff = hasBudget ? Math.abs(budget! - spent) : null
 
   return (
     <div style={{ marginTop: '8px' }}>
-      <div style={{ height: '5px', background: 'var(--color-border)', borderRadius: '3px', overflow: 'hidden' }}>
-        <div style={{ height: '100%', width: `${pct}%`, background: fill, borderRadius: '3px', transition: 'width 0.3s' }} />
-      </div>
+      <ProgressBar value={spent} target={budget} type="expense" height={5} />
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
         <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>
           {currencySymbol}{formatAmount(spent)} spent this month

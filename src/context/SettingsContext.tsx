@@ -20,6 +20,30 @@ export type TaxFilingStatus =
   | 'head_of_household'
   | 'qualifying_surviving_spouse'
 
+export interface AttainmentDisplay {
+  mode: 'standard' | 'custom'
+  colorUnder: string
+  colorWarning: string
+  leniencyPct: number
+  colorOver: string
+}
+
+export const EXPENSE_BAR_DEFAULTS: AttainmentDisplay = {
+  mode: 'standard',
+  colorUnder:   '#22C55E',
+  colorWarning: '#EAB308',
+  leniencyPct:  10,
+  colorOver:    '#EF4444',
+}
+
+export const SAVINGS_BAR_DEFAULTS: AttainmentDisplay = {
+  mode: 'standard',
+  colorUnder:   '#22C55E',
+  colorWarning: '#F59E0B',
+  leniencyPct:  10,
+  colorOver:    '#10B981',
+}
+
 export interface AppSettings {
   displayName: string
   email: string
@@ -29,6 +53,8 @@ export interface AppSettings {
   darkMode: boolean
   defaultLanding: 'dashboard' | 'transactions' | 'categories'
   defaultPeriod: 'week' | 'month' | 'year'
+  expenseBarDisplay: AttainmentDisplay
+  savingsBarDisplay: AttainmentDisplay
 }
 
 const DEFAULTS: AppSettings = {
@@ -40,6 +66,8 @@ const DEFAULTS: AppSettings = {
   darkMode: false,
   defaultLanding: 'dashboard',
   defaultPeriod: 'month',
+  expenseBarDisplay: EXPENSE_BAR_DEFAULTS,
+  savingsBarDisplay: SAVINGS_BAR_DEFAULTS,
 }
 
 const STORAGE_KEY = 'minance_settings'

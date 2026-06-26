@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, Fragment } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Category, Transaction, TransactionSplit } from '../types'
 import { useSettings } from '../context/SettingsContext'
+import ProgressBar from './ProgressBar'
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
@@ -583,27 +584,17 @@ export default function Dashboard({ onDrillDown, onUncatDrillDown }: DashboardPr
   // ── Render ──────────────────────────────────────────────────────────────────
 
   function renderBudgetBar(spent: number, budget: number | null, isIncome: boolean) {
-    const hasBudget = budget !== null && budget > 0
-    const pct = hasBudget ? Math.min((spent / budget!) * 100, 100) : 0
-    const over = hasBudget && (isIncome ? spent < budget! : spent > budget!)
-    const fill = hasBudget ? (over ? 'var(--color-expense)' : 'var(--color-income)') : 'var(--color-border)'
-    const diff = hasBudget ? Math.abs(budget! - spent) : null
-
+    if (!budget || budget <= 0) return null
+    const over = isIncome ? spent < budget : spent > budget
+    const diff = Math.abs(budget - spent)
     return (
       <div style={{ marginTop: '4px' }}>
-        <div style={{ height: '3px', background: 'var(--color-border)', borderRadius: '2px', overflow: 'hidden' }}>
-          <div style={{ height: '100%', width: `${pct}%`, background: fill, borderRadius: '2px', transition: 'width 0.3s' }} />
-        </div>
-        {hasBudget && diff !== null && (
-          <span style={{ fontSize: '10px', color: over ? 'var(--color-expense)' : 'var(--color-income)', fontWeight: 500 }}>
-            {isIncome
-              ? over ? `${currencySymbol}${formatAmount(diff)} below target` : `${currencySymbol}${formatAmount(diff)} above target`
-              : over ? `${currencySymbol}${formatAmount(diff)} over` : `${currencySymbol}${formatAmount(diff)} left`}
-          </span>
-        )}
-        {!hasBudget && (
-          <span style={{ fontSize: '10px', color: 'var(--color-text-muted)' }}>No budget set</span>
-        )}
+        <ProgressBar value={isIncome ? spent : spent} target={budget} type="expense" height={3} />
+        <span style={{ fontSize: '10px', color: over ? 'var(--color-expense)' : 'var(--color-income)', fontWeight: 500 }}>
+          {isIncome
+            ? over ? `${currencySymbol}${formatAmount(diff)} below target` : `${currencySymbol}${formatAmount(diff)} above target`
+            : over ? `${currencySymbol}${formatAmount(diff)} over` : `${currencySymbol}${formatAmount(diff)} left`}
+        </span>
       </div>
     )
   }

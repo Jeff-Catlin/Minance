@@ -4,6 +4,7 @@ import { useSettings } from '../context/SettingsContext'
 import type { Account, Category, Transaction } from '../types'
 import TransactionDetailModal from './TransactionDetailModal'
 import EditTransactionModal from './EditTransactionModal'
+import ProgressBar from './ProgressBar'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -646,15 +647,7 @@ export default function SavingsTab() {
 
             {/* Progress bar */}
             <div style={{ marginTop: '12px' }}>
-              <div style={{ height: '8px', background: 'var(--color-border)', borderRadius: '4px', overflow: 'hidden' }}>
-                <div style={{
-                  height: '100%',
-                  width: `${pct}%`,
-                  background: over ? 'var(--color-expense)' : cfg.color,
-                  borderRadius: '4px',
-                  transition: 'width 0.4s ease',
-                }} />
-              </div>
+              <ProgressBar value={total} target={goal.target_amount} type="savings" height={8} baseColor={cfg.color} />
               <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px' }}>
                 <span style={{ fontSize: '13px', color: total < 0 ? 'var(--color-expense)' : 'var(--color-text)', fontWeight: 500 }}>
                   {formatAmount(total, currencySymbol)} saved

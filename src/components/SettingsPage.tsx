@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { useSettings, CURRENCY_SYMBOLS } from '../context/SettingsContext'
-import type { Currency, AppSettings, TaxFilingStatus } from '../context/SettingsContext'
+import { useSettings, CURRENCY_SYMBOLS, EXPENSE_BAR_DEFAULTS, SAVINGS_BAR_DEFAULTS } from '../context/SettingsContext'
+import type { Currency, AppSettings, TaxFilingStatus, AttainmentDisplay } from '../context/SettingsContext'
 import { supabase } from '../lib/supabase'
 import {
   exportCategoriesCSV, exportTransactionsCSV,
@@ -178,6 +178,125 @@ function ProfileSection() {
 
 // ── Preferences ───────────────────────────────────────────────────────────────
 
+const COLOR_PALETTE = [
+  { label: 'Green',    value: '#22C55E' },
+  { label: 'Emerald',  value: '#10B981' },
+  { label: 'Teal',     value: '#14B8A6' },
+  { label: 'Cyan',     value: '#06B6D4' },
+  { label: 'Blue',     value: '#3B82F6' },
+  { label: 'Indigo',   value: '#6366F1' },
+  { label: 'Violet',   value: '#8B5CF6' },
+  { label: 'Purple',   value: '#A855F7' },
+  { label: 'Fuchsia',  value: '#D946EF' },
+  { label: 'Pink',     value: '#EC4899' },
+  { label: 'Rose',     value: '#F43F5E' },
+  { label: 'Red',      value: '#EF4444' },
+  { label: 'Orange',   value: '#F97316' },
+  { label: 'Amber',    value: '#F59E0B' },
+  { label: 'Yellow',   value: '#EAB308' },
+  { label: 'Lime',     value: '#84CC16' },
+  { label: 'Gray',     value: '#6B7280' },
+  { label: 'Slate',    value: '#64748B' },
+]
+
+function ColorPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '6px' }}>
+      {COLOR_PALETTE.map(c => (
+        <button
+          key={c.value}
+          title={c.label}
+          onClick={() => onChange(c.value)}
+          style={{
+            width: '22px', height: '22px', borderRadius: '50%',
+            background: c.value, border: 'none', cursor: 'pointer', padding: 0,
+            outline: value === c.value ? `3px solid ${c.value}` : '2px solid transparent',
+            outlineOffset: '2px',
+            boxShadow: value === c.value ? '0 0 0 1px var(--color-surface)' : 'none',
+            transition: 'outline 0.1s',
+          }}
+        />
+      ))}
+    </div>
+  )
+}
+
+function AttainmentSection({
+  title,
+  description,
+  cfg,
+  defaults,
+  labels,
+  onChange,
+}: {
+  title: string
+  description: string
+  cfg: AttainmentDisplay
+  defaults: AttainmentDisplay
+  labels: { under: string; warning: string; over: string }
+  onChange: (next: AttainmentDisplay) => void
+}) {
+  const up = (partial: Partial<AttainmentDisplay>) => onChange({ ...cfg, ...partial })
+
+  return (
+    <div style={{ marginTop: '20px', padding: '16px', border: '1px solid var(--color-border)', borderRadius: '10px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+        <div>
+          <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--color-text)' }}>{title}</div>
+          <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '2px' }}>{description}</div>
+        </div>
+        <select
+          value={cfg.mode}
+          onChange={e => up({ mode: e.target.value as AttainmentDisplay['mode'] })}
+          style={{ ...sh.select, width: 'auto', minWidth: '120px', fontSize: '13px' }}
+        >
+          <option value="standard">Standard</option>
+          <option value="custom">Custom</option>
+        </select>
+      </div>
+
+      {cfg.mode === 'custom' && (
+        <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div>
+            <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--color-text-muted)' }}>{labels.under}</div>
+            <ColorPicker value={cfg.colorUnder} onChange={v => up({ colorUnder: v })} />
+          </div>
+
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--color-text-muted)' }}>{labels.warning}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginLeft: 'auto' }}>
+                <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>within</span>
+                <input
+                  type="number"
+                  min={1} max={99}
+                  value={cfg.leniencyPct}
+                  onChange={e => up({ leniencyPct: Math.max(1, Math.min(99, Number(e.target.value))) })}
+                  style={{ width: '54px', fontSize: '13px', padding: '3px 6px', borderRadius: '6px', border: '1px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)', fontFamily: 'inherit', textAlign: 'center' }}
+                />
+                <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>%</span>
+              </div>
+            </div>
+            <ColorPicker value={cfg.colorWarning} onChange={v => up({ colorWarning: v })} />
+          </div>
+
+          <div>
+            <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--color-text-muted)' }}>{labels.over}</div>
+            <ColorPicker value={cfg.colorOver} onChange={v => up({ colorOver: v })} />
+          </div>
+
+          <button
+            onClick={() => onChange(defaults)}
+            style={{ ...sh.btn('export'), fontSize: '12px', alignSelf: 'flex-start', marginTop: '2px' }}
+          >
+            Reset to defaults
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
   return (
     <button
@@ -233,7 +352,7 @@ function PreferencesSection() {
       </div>
 
       {/* Default period */}
-      <div style={{ ...sh.row, borderBottom: 'none' }}>
+      <div style={sh.row}>
         <div>
           <div style={{ fontSize: '14px', fontWeight: 500, color: 'var(--color-text)' }}>Default dashboard period</div>
           <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '2px' }}>Time range shown when you open the Dashboard</div>
@@ -247,6 +366,33 @@ function PreferencesSection() {
           <option value="month">This month</option>
           <option value="year">This year</option>
         </select>
+      </div>
+
+      {/* Attainment display */}
+      <div style={{ paddingTop: '14px', borderBottom: 'none' }}>
+        <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--color-text)' }}>Attainment Display</div>
+        <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+          Control how budget and savings goal progress bars are colored.
+          Standard uses green/red. Custom lets you set colors and a leniency buffer.
+        </div>
+
+        <AttainmentSection
+          title="Expense Bars"
+          description="Color scheme for category budget progress bars"
+          cfg={{ ...EXPENSE_BAR_DEFAULTS, ...settings.expenseBarDisplay }}
+          defaults={EXPENSE_BAR_DEFAULTS}
+          labels={{ under: 'Under budget', warning: 'Over budget warning zone', over: 'Over threshold' }}
+          onChange={next => updateSettings({ expenseBarDisplay: next })}
+        />
+
+        <AttainmentSection
+          title="Savings Bars"
+          description="Color scheme for savings goal progress bars"
+          cfg={{ ...SAVINGS_BAR_DEFAULTS, ...settings.savingsBarDisplay }}
+          defaults={SAVINGS_BAR_DEFAULTS}
+          labels={{ under: 'In progress (under goal)', warning: 'Near goal / slightly over', over: 'Goal achieved / well over' }}
+          onChange={next => updateSettings({ savingsBarDisplay: next })}
+        />
       </div>
     </div>
   )
