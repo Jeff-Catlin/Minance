@@ -375,7 +375,7 @@ function DonutChart({ rows, total, uncatAmount, sym, onSliceClick, onUncatClick 
             <div key={r.parentId} style={{ fontSize: '11px', color: 'var(--color-income)', display: 'flex', justifyContent: 'space-between' }}>
               <span
                 onClick={onSliceClick ? () => onSliceClick(r.parentId) : undefined}
-                style={{ cursor: onSliceClick ? 'pointer' : 'default', textDecoration: onSliceClick ? 'underline' : 'none', textUnderlineOffset: '2px' }}
+                style={{ cursor: onSliceClick ? 'pointer' : 'default' }}
               >↩ {r.parentName}</span>
               <span>{sym}{formatAmount(Math.abs(r.parentTotal))}</span>
             </div>
