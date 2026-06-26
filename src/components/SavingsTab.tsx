@@ -681,7 +681,7 @@ export default function SavingsTab() {
       goal_id: toGoalId,
       transaction_id: reassigning.tx.id,
     })
-    if (error) throw error
+    if (error) throw new Error(error.message)
     setReassigning(null)
     load()
   }
@@ -709,7 +709,7 @@ export default function SavingsTab() {
           {showArchived ? 'Archived Goals' : 'Savings Goals'}
         </h2>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          {archivedGoals.length > 0 && (
+          {(showArchived || archivedGoals.length > 0) && (
             <button style={s.btn('ghost')} onClick={() => setShowArchived(v => !v)}>
               {showArchived ? '← Active Goals' : `Archived Goals (${archivedGoals.length})`}
             </button>
