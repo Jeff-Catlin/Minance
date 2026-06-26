@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useSettings } from '../context/SettingsContext'
 import type { Account, Category, Transaction } from '../types'
@@ -19,6 +19,7 @@ interface SavingsGoal {
   year: number | null
   linked_category_id: string | null
   notes: string | null
+  is_archived: boolean
   created_at: string
 }
 
@@ -29,6 +30,12 @@ interface SavingsEntry {
   amount: number
   note: string | null
   created_at: string
+}
+
+interface GoalAssignment {
+  id: string
+  goal_id: string
+  transaction_id: string
 }
 
 // ── Goal type config ──────────────────────────────────────────────────────────
@@ -91,8 +98,16 @@ function calcProgress(
   goal: SavingsGoal,
   entriesByGoal: Map<string, SavingsEntry[]>,
   transactions: Transaction[],
-): { total: number; fromEntries: number; fromCategory: number } {
+  assignedToGoalMap: Map<string, GoalAssignment[]>,
+  assignedTxIds: Set<string>,
+): { total: number; fromEntries: number; fromCategory: number; fromAssigned: number } {
   const entries = entriesByGoal.get(goal.id) ?? []
+  const explicitAssignments = assignedToGoalMap.get(goal.id) ?? []
+
+  const fromAssigned = explicitAssignments.reduce((s, a) => {
+    const tx = transactions.find(t => t.id === a.transaction_id)
+    return tx ? s + tx.amount : s
+  }, 0)
 
   let fromEntries = 0
   let fromCategory = 0
@@ -100,22 +115,22 @@ function calcProgress(
   if (goal.tracking_mode === 'annual_contribution' && goal.year) {
     const from = `${goal.year}-01-01`
     const to   = `${goal.year}-12-31`
-    fromEntries  = entries.filter(e => e.date >= from && e.date <= to).reduce((s, e) => s + e.amount, 0)
+    fromEntries = entries.filter(e => e.date >= from && e.date <= to).reduce((s, e) => s + e.amount, 0)
     if (goal.linked_category_id) {
       fromCategory = transactions
-        .filter(t => t.category_id === goal.linked_category_id && t.date >= from && t.date <= to)
+        .filter(t => t.category_id === goal.linked_category_id && t.date >= from && t.date <= to && !assignedTxIds.has(t.id))
         .reduce((s, t) => s + t.amount, 0)
     }
   } else {
-    fromEntries  = entries.reduce((s, e) => s + e.amount, 0)
+    fromEntries = entries.reduce((s, e) => s + e.amount, 0)
     if (goal.linked_category_id) {
       fromCategory = transactions
-        .filter(t => t.category_id === goal.linked_category_id)
+        .filter(t => t.category_id === goal.linked_category_id && !assignedTxIds.has(t.id))
         .reduce((s, t) => s + t.amount, 0)
     }
   }
 
-  return { total: fromEntries + fromCategory, fromEntries, fromCategory }
+  return { total: fromEntries + fromCategory + fromAssigned, fromEntries, fromCategory, fromAssigned }
 }
 
 // ── Styles ────────────────────────────────────────────────────────────────────
@@ -445,6 +460,81 @@ function AddEntryModal({ goal, onSave, onClose }: AddEntryModalProps) {
   )
 }
 
+// ── Reassign Modal ────────────────────────────────────────────────────────────
+
+interface ReassignModalProps {
+  transaction: Transaction
+  fromGoal: SavingsGoal
+  allGoals: SavingsGoal[]
+  currencySymbol: string
+  onSave: (toGoalId: string) => Promise<void>
+  onClose: () => void
+}
+
+function ReassignModal({ transaction, fromGoal, allGoals, currencySymbol, onSave, onClose }: ReassignModalProps) {
+  const otherGoals = allGoals.filter(g => g.id !== fromGoal.id && !g.is_archived)
+  const [toGoalId, setToGoalId] = useState(otherGoals[0]?.id ?? '')
+  const [saving, setSaving]     = useState(false)
+  const [error, setError]       = useState('')
+
+  async function handleSave() {
+    if (!toGoalId) { setError('Please select a goal.'); return }
+    setSaving(true)
+    try {
+      await onSave(toGoalId)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Unknown error')
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div style={s.overlay} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div style={{ ...s.modal, width: '400px' }}>
+        <p style={{ fontSize: '17px', fontWeight: 600, color: 'var(--color-text)', margin: '0 0 4px 0' }}>
+          Reassign Contribution
+        </p>
+        <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', margin: '0 0 20px 0' }}>
+          Move this transaction from <strong>{fromGoal.name}</strong> to another goal.
+        </p>
+
+        <div style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: '8px', padding: '10px 14px', marginBottom: '16px' }}>
+          <div style={{ fontSize: '13px', color: 'var(--color-text)', fontWeight: 500 }}>{transaction.vendor}</div>
+          <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+            {formatDate(transaction.date)} · {formatAmount(transaction.amount, currencySymbol)}
+          </div>
+        </div>
+
+        <label style={s.label}>Assign to Goal</label>
+        {otherGoals.length === 0 ? (
+          <p style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>No other goals available.</p>
+        ) : (
+          <select style={s.select} value={toGoalId} onChange={e => setToGoalId(e.target.value)}>
+            {otherGoals.map(g => (
+              <option key={g.id} value={g.id}>
+                {g.name}{g.year ? ` (${g.year})` : ''}
+              </option>
+            ))}
+          </select>
+        )}
+
+        {error && (
+          <div style={{ marginTop: '12px', fontSize: '13px', padding: '8px 12px', borderRadius: '8px', background: 'rgba(224,107,107,0.1)', color: 'var(--color-expense)', border: '1px solid var(--color-expense)' }}>
+            {error}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '20px' }}>
+          <button style={s.btn('ghost')} onClick={onClose}>Cancel</button>
+          <button style={s.btn('primary')} onClick={handleSave} disabled={saving || otherGoals.length === 0}>
+            {saving ? 'Moving…' : 'Move to Goal'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function SavingsTab() {
@@ -455,9 +545,14 @@ export default function SavingsTab() {
   const [entries, setEntries]       = useState<SavingsEntry[]>([])
   const [transactions, setTxns]     = useState<Transaction[]>([])
   const [categories, setCategories] = useState<Category[]>([])
+  const [assignments, setAssignments] = useState<GoalAssignment[]>([])
   const [loading, setLoading]       = useState(true)
   const [expanded, setExpanded]       = useState<Set<string>>(new Set())
   const [showAllGoals, setShowAllGoals] = useState<Set<string>>(new Set())
+  const [showArchived, setShowArchived] = useState(false)
+  const [menuGoalId, setMenuGoalId]   = useState<string | null>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const [reassigning, setReassigning] = useState<{ tx: Transaction; fromGoal: SavingsGoal } | null>(null)
 
   const CONTRIBUTION_LIMIT = 10
 
@@ -478,7 +573,7 @@ export default function SavingsTab() {
   const [dragOverId, setDragOverId]       = useState<string | null>(null)
 
   async function load() {
-    const [{ data: g }, { data: e }, { data: t }, { data: c }, { data: a }] = await Promise.all([
+    const [{ data: g }, { data: e }, { data: t }, { data: c }, { data: a }, { data: asgn }] = await Promise.all([
       supabase.from('savings_goals').select('*')
         .order('sort_order', { ascending: true, nullsFirst: false })
         .order('created_at', { ascending: true }),
@@ -486,16 +581,29 @@ export default function SavingsTab() {
       supabase.from('transactions').select('*').order('date', { ascending: false }),
       supabase.from('categories').select('*').eq('is_archived', false),
       supabase.from('accounts').select('*'),
+      supabase.from('savings_goal_transactions').select('*'),
     ])
     setGoals(g ?? [])
     setEntries(e ?? [])
     setTxns(t ?? [])
     setCategories(c ?? [])
     setAccountsMap(new Map((a ?? []).map(acc => [acc.id, acc as Account])))
+    setAssignments(asgn ?? [])
     setLoading(false)
   }
 
   useEffect(() => { load() }, [])
+
+  useEffect(() => {
+    if (!menuGoalId) return
+    function onDown(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuGoalId(null)
+      }
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [menuGoalId])
 
   async function handleDrop(dropId: string) {
     if (!dragGoalId || dragGoalId === dropId) { setDragGoalId(null); setDragOverId(null); return }
@@ -528,7 +636,34 @@ export default function SavingsTab() {
     return m
   }, [entries])
 
+  const assignedToGoalMap = useMemo(() => {
+    const m = new Map<string, GoalAssignment[]>()
+    for (const a of assignments) {
+      if (!m.has(a.goal_id)) m.set(a.goal_id, [])
+      m.get(a.goal_id)!.push(a)
+    }
+    return m
+  }, [assignments])
+
+  const assignedTxIds = useMemo(() => new Set(assignments.map(a => a.transaction_id)), [assignments])
+
   const catMap = useMemo(() => new Map(categories.map(c => [c.id, c.name])), [categories])
+
+  const activeGoals   = useMemo(() => goals.filter(g => !g.is_archived), [goals])
+  const archivedGoals = useMemo(() => goals.filter(g => g.is_archived), [goals])
+  const visibleGoals  = showArchived ? archivedGoals : activeGoals
+
+  async function archiveGoal(id: string) {
+    await supabase.from('savings_goals').update({ is_archived: true }).eq('id', id)
+    setMenuGoalId(null)
+    load()
+  }
+
+  async function restoreGoal(id: string) {
+    await supabase.from('savings_goals').update({ is_archived: false }).eq('id', id)
+    setMenuGoalId(null)
+    load()
+  }
 
   async function deleteGoal(id: string) {
     await supabase.from('savings_goals').delete().eq('id', id)
@@ -537,6 +672,22 @@ export default function SavingsTab() {
 
   async function deleteEntry(id: string) {
     await supabase.from('savings_entries').delete().eq('id', id)
+    load()
+  }
+
+  async function handleReassign(toGoalId: string) {
+    if (!reassigning) return
+    const { error } = await supabase.from('savings_goal_transactions').insert({
+      goal_id: toGoalId,
+      transaction_id: reassigning.tx.id,
+    })
+    if (error) throw error
+    setReassigning(null)
+    load()
+  }
+
+  async function unassignTransaction(assignmentId: string) {
+    await supabase.from('savings_goal_transactions').delete().eq('id', assignmentId)
     load()
   }
 
@@ -555,22 +706,31 @@ export default function SavingsTab() {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
         <h2 style={{ fontSize: '20px', fontWeight: 600, color: 'var(--color-text)', margin: 0 }}>
-          Savings Goals
+          {showArchived ? 'Archived Goals' : 'Savings Goals'}
         </h2>
-        <button style={s.btn('primary')} onClick={() => setAddGoalOpen(true)}>+ Add Goal</button>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          {archivedGoals.length > 0 && (
+            <button style={s.btn('ghost')} onClick={() => setShowArchived(v => !v)}>
+              {showArchived ? '← Active Goals' : `Archived Goals (${archivedGoals.length})`}
+            </button>
+          )}
+          {!showArchived && (
+            <button style={s.btn('primary')} onClick={() => setAddGoalOpen(true)}>+ Add Goal</button>
+          )}
+        </div>
       </div>
 
       {/* Empty state */}
-      {goals.length === 0 && (
+      {visibleGoals.length === 0 && (
         <div style={{ ...s.card, color: 'var(--color-text-muted)', fontSize: '14px' }}>
-          No savings goals yet — add one to start tracking your progress.
+          {showArchived ? 'No archived goals.' : 'No savings goals yet — add one to start tracking your progress.'}
         </div>
       )}
 
       {/* Goal cards */}
-      {goals.map(goal => {
+      {visibleGoals.map(goal => {
         const cfg = GOAL_TYPES[goal.goal_type] ?? GOAL_TYPES.custom
-        const { total, fromEntries: fe, fromCategory: fc } = calcProgress(goal, entriesByGoal, transactions)
+        const { total, fromEntries: fe, fromCategory: fc, fromAssigned: fa } = calcProgress(goal, entriesByGoal, transactions, assignedToGoalMap, assignedTxIds)
         const pct = goal.target_amount > 0 ? Math.min((total / goal.target_amount) * 100, 100) : 0
         const over = total > goal.target_amount
         const isOpen = expanded.has(goal.id)
@@ -579,6 +739,7 @@ export default function SavingsTab() {
           ? transactions
               .filter(t => {
                 if (t.category_id !== goal.linked_category_id) return false
+                if (assignedTxIds.has(t.id)) return false
                 if (goal.tracking_mode === 'annual_contribution' && goal.year) {
                   return t.date >= `${goal.year}-01-01` && t.date <= `${goal.year}-12-31`
                 }
@@ -633,15 +794,28 @@ export default function SavingsTab() {
                   </div>
                 )}
               </div>
-              <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }} onMouseDown={e => e.stopPropagation()}>
-                <button style={{ ...s.btn('small'), cursor: 'pointer' }} onClick={() => setAddEntryGoal(goal)}>+ Entry</button>
-                <button style={{ ...s.btn('small'), cursor: 'pointer' }} onClick={() => setEditGoal(goal)}>Edit</button>
-                <button
-                  style={{ ...s.btn('small'), color: 'var(--color-expense)', borderColor: 'var(--color-expense)', cursor: 'pointer' }}
-                  onClick={() => deleteGoal(goal.id)}
-                >
-                  Remove
-                </button>
+              <div style={{ display: 'flex', gap: '6px', flexShrink: 0, alignItems: 'center', position: 'relative' }} onMouseDown={e => e.stopPropagation()} ref={menuGoalId === goal.id ? menuRef : undefined}>
+                {!showArchived && (
+                  <button style={{ ...s.btn('small'), cursor: 'pointer' }} onClick={() => setAddEntryGoal(goal)}>+ Entry</button>
+                )}
+                {showArchived ? (
+                  <button style={{ ...s.btn('small'), cursor: 'pointer' }} onClick={() => restoreGoal(goal.id)}>Restore</button>
+                ) : (
+                  <button
+                    style={{ ...s.btn('small'), cursor: 'pointer', fontSize: '16px', padding: '1px 10px', lineHeight: 1 }}
+                    onClick={() => setMenuGoalId(menuGoalId === goal.id ? null : goal.id)}
+                    title="Goal options"
+                  >
+                    ⋯
+                  </button>
+                )}
+                {menuGoalId === goal.id && (
+                  <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '8px', boxShadow: '0 4px 16px rgba(0,0,0,0.15)', zIndex: 50, minWidth: '160px', padding: '4px 0' }}>
+                    <button onClick={() => { setEditGoal(goal); setMenuGoalId(null) }} style={{ fontFamily: 'inherit', display: 'block', width: '100%', textAlign: 'left', padding: '8px 14px', fontSize: '13px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text)' }}>Edit Goal</button>
+                    <button onClick={() => archiveGoal(goal.id)} style={{ fontFamily: 'inherit', display: 'block', width: '100%', textAlign: 'left', padding: '8px 14px', fontSize: '13px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)' }}>Archive Goal</button>
+                    <button onClick={() => { setMenuGoalId(null); deleteGoal(goal.id) }} style={{ fontFamily: 'inherit', display: 'block', width: '100%', textAlign: 'left', padding: '8px 14px', fontSize: '13px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-expense)' }}>Delete Goal</button>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -657,7 +831,7 @@ export default function SavingsTab() {
                   {over && <span style={{ color: 'var(--color-income)', marginLeft: '6px' }}>✓ Goal reached!</span>}
                 </span>
               </div>
-              {(fe > 0 || fc > 0) && (
+              {(fe > 0 || fc > 0 || fa > 0) && (
                 <div style={{ display: 'flex', gap: '16px', marginTop: '4px' }}>
                   {fe > 0 && (
                     <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>
@@ -669,20 +843,31 @@ export default function SavingsTab() {
                       Category: {formatAmount(fc, currencySymbol)}
                     </span>
                   )}
+                  {fa > 0 && (
+                    <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>
+                      Reassigned: {formatAmount(fa, currencySymbol)}
+                    </span>
+                  )}
                 </div>
               )}
             </div>
 
             {/* Expand / collapse contributions */}
             {(() => {
-              // Merge manual entries + linked transactions into one chronological list
               type ContribItem =
-                | { kind: 'manual'; id: string; date: string; amount: number; note: string | null }
+                | { kind: 'manual';   id: string; date: string; amount: number; note: string | null }
                 | { kind: 'category'; id: string; date: string; amount: number; vendor: string }
+                | { kind: 'assigned'; id: string; date: string; amount: number; vendor: string; assignmentId: string }
+
+              const assignedItems: ContribItem[] = (assignedToGoalMap.get(goal.id) ?? []).flatMap(a => {
+                const tx = transactions.find(t => t.id === a.transaction_id)
+                return tx ? [{ kind: 'assigned' as const, id: tx.id, date: tx.date, amount: tx.amount, vendor: tx.vendor, assignmentId: a.id }] : []
+              })
 
               const allContribs: ContribItem[] = [
                 ...goalEntries.map(e => ({ kind: 'manual' as const, id: e.id, date: e.date, amount: e.amount, note: e.note })),
                 ...linkedCatTxns.map(t => ({ kind: 'category' as const, id: t.id, date: t.date, amount: t.amount, vendor: t.vendor })),
+                ...assignedItems,
               ].sort((a, b) => b.date.localeCompare(a.date))
 
               const totalCount = allContribs.length
@@ -708,12 +893,14 @@ export default function SavingsTab() {
                         <>
                           {visible.map(item => {
                             const isCategory = item.kind === 'category'
-                            const fullTx = isCategory ? transactions.find(t => t.id === item.id) : null
+                            const isAssigned = item.kind === 'assigned'
+                            const isTx = isCategory || isAssigned
+                            const fullTx = isTx ? transactions.find(t => t.id === item.id) : null
                             return (
                             <div
-                              key={item.id}
-                              onClick={isCategory && fullTx ? () => setDetailTx({ ...fullTx, categoryName: fullTx.category_id ? catMap.get(fullTx.category_id) ?? null : null }) : undefined}
-                              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--color-border)', cursor: isCategory ? 'pointer' : 'default' }}
+                              key={`${item.kind}-${item.id}`}
+                              onClick={isTx && fullTx ? () => setDetailTx({ ...fullTx, categoryName: fullTx.category_id ? catMap.get(fullTx.category_id) ?? null : null }) : undefined}
+                              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--color-border)', cursor: isTx ? 'pointer' : 'default' }}
                             >
                               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
                                 <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', flexShrink: 0 }}>{formatDate(item.date)}</span>
@@ -723,7 +910,12 @@ export default function SavingsTab() {
                                     {item.note && <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.note}</span>}
                                   </>
                                 ) : (
-                                  <span style={{ fontSize: '13px', color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.vendor}</span>
+                                  <>
+                                    {isAssigned && (
+                                      <span style={{ fontSize: '11px', background: '#8B5CF618', color: '#8B5CF6', border: '1px solid #8B5CF640', borderRadius: '10px', padding: '1px 6px', flexShrink: 0 }}>Reassigned</span>
+                                    )}
+                                    <span style={{ fontSize: '13px', color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{(item as { vendor: string }).vendor}</span>
+                                  </>
                                 )}
                               </div>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
@@ -732,6 +924,14 @@ export default function SavingsTab() {
                                 </span>
                                 {item.kind === 'manual' && (
                                   <button onClick={e => { e.stopPropagation(); deleteEntry(item.id) }} style={{ fontFamily: 'inherit', fontSize: '13px', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', padding: '0 2px', lineHeight: 1 }}>×</button>
+                                )}
+                                {item.kind === 'category' && fullTx && !showArchived && (
+                                  <button onClick={e => { e.stopPropagation(); setReassigning({ tx: fullTx, fromGoal: goal }) }} style={{ fontFamily: 'inherit', fontSize: '11px', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: '6px', cursor: 'pointer', color: 'var(--color-text-muted)', padding: '1px 6px' }} title="Move to another goal">
+                                    Reassign →
+                                  </button>
+                                )}
+                                {item.kind === 'assigned' && (
+                                  <button onClick={e => { e.stopPropagation(); unassignTransaction((item as { assignmentId: string }).assignmentId) }} style={{ fontFamily: 'inherit', fontSize: '13px', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', padding: '0 2px', lineHeight: 1 }} title="Remove reassignment">×</button>
                                 )}
                               </div>
                             </div>
@@ -796,6 +996,16 @@ export default function SavingsTab() {
           transaction={editingTx}
           onSave={() => { setEditingTx(null); load() }}
           onClose={() => setEditingTx(null)}
+        />
+      )}
+      {reassigning && (
+        <ReassignModal
+          transaction={reassigning.tx}
+          fromGoal={reassigning.fromGoal}
+          allGoals={goals}
+          currencySymbol={currencySymbol}
+          onSave={handleReassign}
+          onClose={() => setReassigning(null)}
         />
       )}
     </div>
