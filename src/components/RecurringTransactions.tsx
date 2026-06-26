@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Account, Category, Transaction } from '../types'
 import { useSettings } from '../context/SettingsContext'
@@ -9,7 +9,7 @@ import EditTransactionModal from './EditTransactionModal'
 
 type Cadence = 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'biannually' | 'annually'
 type GraphMode = 'historical' | 'forecast'
-type GraphFilter = 'all' | 'monthly'
+type GraphFilter = Set<Cadence>
 type GraphRange = 1 | 3 | 6 | 12 | 'ytd'
 
 interface RecurringEntry {
@@ -215,7 +215,7 @@ function buildHistoricalData(
   range: GraphRange,
 ): BarPoint[] {
   const now = new Date()
-  const filtered = filter === 'monthly' ? recurring.filter(r => r.cadence === 'monthly') : recurring
+  const filtered = filter.size > 0 ? recurring.filter(r => filter.has(r.cadence)) : recurring
   const data: BarPoint[] = []
 
   const monthsBack = range === 'ytd' ? now.getMonth() : (range as number) - 1
@@ -249,7 +249,7 @@ function buildForecastData(
   range: GraphRange,
 ): BarPoint[] {
   const now = new Date()
-  const filtered = filter === 'monthly' ? recurring.filter(r => r.cadence === 'monthly') : recurring
+  const filtered = filter.size > 0 ? recurring.filter(r => filter.has(r.cadence)) : recurring
   const data: BarPoint[] = []
 
   const monthsAhead = range === 'ytd' ? 12 - now.getMonth() : range as number
@@ -696,7 +696,9 @@ export default function RecurringTransactions({ typeFilter }: { typeFilter: 'exp
   const [expandedSuggestions, setExpandedSuggestions] = useState<Set<string>>(new Set())
   const [showAllSuggestions, setShowAllSuggestions] = useState<Set<string>>(new Set())
   const [graphMode, setGraphMode] = useState<GraphMode>('historical')
-  const [graphFilter, setGraphFilter] = useState<GraphFilter>('all')
+  const [graphFilter, setGraphFilter] = useState<GraphFilter>(new Set())
+  const [graphCadenceOpen, setGraphCadenceOpen] = useState(false)
+  const graphCadenceRef = useRef<HTMLDivElement>(null)
   const [graphRange, setGraphRange] = useState<GraphRange>(1)
   const [showAddModal, setShowAddModal] = useState(false)
   const [confirmingKey, setConfirmingKey] = useState<string | null>(null)
@@ -728,6 +730,17 @@ export default function RecurringTransactions({ typeFilter }: { typeFilter: 'exp
   }
 
   useEffect(() => { load() }, [])
+
+  useEffect(() => {
+    if (!graphCadenceOpen) return
+    function onMouseDown(e: MouseEvent) {
+      if (graphCadenceRef.current && !graphCadenceRef.current.contains(e.target as Node)) {
+        setGraphCadenceOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onMouseDown)
+    return () => document.removeEventListener('mousedown', onMouseDown)
+  }, [graphCadenceOpen])
 
   // ── Derived data ─────────────────────────────────────────────────────────────
 
@@ -998,8 +1011,43 @@ export default function RecurringTransactions({ typeFilter }: { typeFilter: 'exp
               <button style={accentToggleBtn(graphMode === 'forecast')} onClick={() => setGraphMode('forecast')}>Forecast</button>
             </div>
             <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-              <button style={accentToggleBtn(graphFilter === 'all')} onClick={() => setGraphFilter('all')}>All</button>
-              <button style={accentToggleBtn(graphFilter === 'monthly')} onClick={() => setGraphFilter('monthly')}>Monthly only</button>
+              <button style={accentToggleBtn(graphFilter.size === 0)} onClick={() => setGraphFilter(new Set())}>All</button>
+              {/* Cadence multi-select dropdown */}
+              <div ref={graphCadenceRef} style={{ position: 'relative' }}>
+                <button
+                  style={accentToggleBtn(graphFilter.size > 0)}
+                  onClick={() => setGraphCadenceOpen(o => !o)}
+                >
+                  Cadence{graphFilter.size > 0 ? ` (${graphFilter.size})` : ''}
+                </button>
+                {graphCadenceOpen && (
+                  <div style={{
+                    position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 200,
+                    background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+                    borderRadius: '8px', padding: '6px 0', boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+                    minWidth: '150px',
+                  }}>
+                    {(['weekly', 'biweekly', 'monthly', 'quarterly', 'biannually', 'annually'] as Cadence[]).map(c => {
+                      const checked = graphFilter.has(c)
+                      return (
+                        <label key={c} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 14px', cursor: 'pointer', fontSize: '13px', color: 'var(--color-text)' }}>
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => {
+                              const next = new Set(graphFilter)
+                              checked ? next.delete(c) : next.add(c)
+                              setGraphFilter(next)
+                            }}
+                            style={{ cursor: 'pointer', accentColor: accent }}
+                          />
+                          {CADENCE_LABELS[c]}
+                        </label>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
               <div style={{ width: '1px', background: 'var(--color-border)', margin: '0 4px' }} />
               {([1, 3, 6, 12, 'ytd'] as GraphRange[]).map(r => (
                 <button key={r} style={accentToggleBtn(graphRange === r)} onClick={() => setGraphRange(r)}>
