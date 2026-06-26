@@ -537,7 +537,26 @@ export default function UncategorizedTab({ onCountChange }: UncategorizedTabProp
                       {formatDate(t.date)}
                     </td>
                     <td style={{ ...s.td, fontWeight: 500 }}>
-                      {t.vendor}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        {t.vendor}
+                        <button
+                          style={{
+                            fontFamily: 'inherit',
+                            fontSize: '10px',
+                            padding: '1px 6px',
+                            borderRadius: '4px',
+                            border: '1px solid var(--color-border)',
+                            background: 'transparent',
+                            color: 'var(--color-text-muted)',
+                            cursor: 'pointer',
+                            whiteSpace: 'nowrap',
+                          }}
+                          onClick={e => { e.stopPropagation(); selectAllByVendor(t.vendor) }}
+                          title={`Select all ${t.vendor} transactions`}
+                        >
+                          select all
+                        </button>
+                      </div>
                     </td>
                     <td style={{ ...s.td, color: 'var(--color-text-muted)', fontSize: '13px' }}>
                       {t.description ?? '—'}
