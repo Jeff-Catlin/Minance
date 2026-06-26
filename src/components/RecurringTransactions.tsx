@@ -341,8 +341,8 @@ function BarChart({ data, sym, color }: { data: BarPoint[]; sym: string; color: 
   const [hovered, setHovered] = useState<number | null>(null)
   const max = Math.max(...data.map(d => d.amount), 1)
   const BAR_H = 200
-  const BAR_W = 30
-  const GAP = 8
+  const BAR_W = 36
+  const GAP = 24
   const totalW = data.length * (BAR_W + GAP) - GAP
   const hoveredBar = hovered !== null ? data[hovered] : null
 
