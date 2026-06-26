@@ -635,11 +635,6 @@ export default function Dashboard({ onDrillDown, onUncatDrillDown }: DashboardPr
                         of {currencySymbol}{formatAmount(scaledParentBudget)}
                       </div>
                     )}
-                    {row.children.length > 0 && Math.abs(row.directTotal) >= 0.005 && (
-                      <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', fontWeight: 400 }}>
-                        incl. {currencySymbol}{formatAmount(Math.abs(row.directTotal))} direct
-                      </div>
-                    )}
                   </td>
                 </tr>
                 {expanded.has(row.parentId) && row.children.map(child => {
@@ -666,6 +661,18 @@ export default function Dashboard({ onDrillDown, onUncatDrillDown }: DashboardPr
                     </tr>
                   )
                 })}
+                {expanded.has(row.parentId) && Math.abs(row.directTotal) >= 0.005 && (
+                  <tr key={`${row.parentId}-direct`}>
+                    <td style={s.childTd()}>
+                      <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+                        {row.parentName} (direct)
+                      </span>
+                    </td>
+                    <td style={{ ...s.childTd(row.directTotal < 0 ? 'var(--color-income)' : color), textAlign: 'right', fontVariantNumeric: 'tabular-nums', opacity: 0.8 }}>
+                      {row.directTotal < 0 ? '−' : ''}{currencySymbol}{formatAmount(Math.abs(row.directTotal))}
+                    </td>
+                  </tr>
+                )}
               </>
             )
           })}
