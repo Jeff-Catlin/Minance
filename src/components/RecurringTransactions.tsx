@@ -631,7 +631,7 @@ function AddRecurringModal({ categoryOptions, transactions, onSave, onClose }: A
 
   function toggleMonth(m: number) {
     const next = new Set(expectedMonths)
-    if (next.has(m)) next.delete(m) else next.add(m)
+    if (next.has(m)) { next.delete(m) } else { next.add(m) }
     setExpectedMonths(next)
   }
 
@@ -643,7 +643,7 @@ function AddRecurringModal({ categoryOptions, transactions, onSave, onClose }: A
     setSaving(true)
     const err = await onSave(vendor.trim(), categoryId || null, cadence, day, month, months)
     setSaving(false)
-    if (err) setError(err) else onClose()
+    if (err) { setError(err) } else { onClose() }
   }
 
   const isWeekly = cadence === 'weekly' || cadence === 'biweekly'
@@ -875,10 +875,6 @@ export default function RecurringTransactions({ typeFilter, onSuggestionCount }:
     ...categories.filter(c => c.parent_id === p.id).map(c => ({ id: c.id, label: c.name, indent: true })),
   ])
 
-  const uniqueVendors = useMemo(
-    () => [...new Set(transactions.map(t => t.vendor))].sort(),
-    [transactions],
-  )
 
   const [showAllEntries, setShowAllEntries] = useState<Set<string>>(new Set())
   const ENTRY_LIMIT = 10
