@@ -22,6 +22,8 @@ interface TransactionsScreenProps {
 export default function TransactionsScreen({ initialFilter, filterKey = 0, initialSubTab }: TransactionsScreenProps) {
   const [subTab, setSubTab] = useState<SubTab>((initialSubTab as SubTab) ?? 'all')
   const [uncategorizedCount, setUncategorizedCount] = useState<number | null>(null)
+  const [recurringExpenseCount, setRecurringExpenseCount] = useState<number | null>(null)
+  const [recurringIncomeCount, setRecurringIncomeCount] = useState<number | null>(null)
 
   // Fetch count on mount so the badge shows immediately without clicking the tab
   useEffect(() => {
@@ -42,8 +44,18 @@ export default function TransactionsScreen({ initialFilter, filterKey = 0, initi
         ? `Uncategorized (${uncategorizedCount})`
         : 'Uncategorized',
     },
-    { key: 'recurring-expenses', label: () => 'Recurring Expenses' },
-    { key: 'recurring-income', label: () => 'Recurring Income' },
+    {
+      key: 'recurring-expenses',
+      label: () => recurringExpenseCount !== null && recurringExpenseCount > 0
+        ? `Recurring Expenses (${recurringExpenseCount})`
+        : 'Recurring Expenses',
+    },
+    {
+      key: 'recurring-income',
+      label: () => recurringIncomeCount !== null && recurringIncomeCount > 0
+        ? `Recurring Income (${recurringIncomeCount})`
+        : 'Recurring Income',
+    },
   ]
 
   return (
@@ -56,7 +68,9 @@ export default function TransactionsScreen({ initialFilter, filterKey = 0, initi
       }}>
         {SUB_TABS.map(tab => {
           const active = subTab === tab.key
-          const isAlert = tab.key === 'uncategorized' && uncategorizedCount !== null && uncategorizedCount > 0
+          const isAlert = (tab.key === 'uncategorized' && uncategorizedCount !== null && uncategorizedCount > 0)
+            || (tab.key === 'recurring-expenses' && recurringExpenseCount !== null && recurringExpenseCount > 0)
+            || (tab.key === 'recurring-income' && recurringIncomeCount !== null && recurringIncomeCount > 0)
           return (
             <button
               key={tab.key}
@@ -91,8 +105,8 @@ export default function TransactionsScreen({ initialFilter, filterKey = 0, initi
       {subTab === 'uncategorized' && (
         <UncategorizedTab onCountChange={setUncategorizedCount} />
       )}
-      {subTab === 'recurring-expenses' && <RecurringTransactions typeFilter="expense" />}
-      {subTab === 'recurring-income' && <RecurringTransactions typeFilter="income" />}
+      {subTab === 'recurring-expenses' && <RecurringTransactions typeFilter="expense" onSuggestionCount={setRecurringExpenseCount} />}
+      {subTab === 'recurring-income' && <RecurringTransactions typeFilter="income" onSuggestionCount={setRecurringIncomeCount} />}
     </div>
   )
 }

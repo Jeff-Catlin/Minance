@@ -677,7 +677,7 @@ function AddRecurringModal({ categoryOptions, uniqueVendors, onSave, onClose }: 
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function RecurringTransactions({ typeFilter }: { typeFilter: 'expense' | 'income' }) {
+export default function RecurringTransactions({ typeFilter, onSuggestionCount }: { typeFilter: 'expense' | 'income'; onSuggestionCount?: (n: number) => void }) {
   const { currencySymbol } = useSettings()
   const accent = typeFilter === 'expense' ? '#F59E0B' : 'var(--color-primary-text)'
   const accentBtn = (): React.CSSProperties => ({ ...s.btn('primary'), background: accent, borderColor: accent })
@@ -768,6 +768,8 @@ export default function RecurringTransactions({ typeFilter }: { typeFilter: 'exp
     () => detectPatterns(nonExcludedTxns, recurring, dismissedKeys),
     [nonExcludedTxns, recurring, dismissedKeys],
   )
+
+  useEffect(() => { onSuggestionCount?.(suggestions.length) }, [suggestions.length, onSuggestionCount])
 
   const graphData = useMemo(() => {
     if (graphMode === 'historical') return buildHistoricalData(nonExcludedTxns, typeFilteredRecurring, graphFilter, graphRange)
