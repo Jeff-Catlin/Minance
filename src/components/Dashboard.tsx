@@ -207,7 +207,7 @@ const SLICE_COLORS = [
   '#06B6D4', '#84CC16',
 ]
 
-type DonutRow = { parentId: string; parentName: string; parentTotal: number; children: { id: string; name: string; total: number }[] }
+type DonutRow = { parentId: string; parentName: string; parentTotal: number; directTotal: number; children: { id: string; name: string; total: number }[] }
 
 function DonutChart({ rows, total, uncatAmount, sym, onSliceClick, onUncatClick }: {
   rows: DonutRow[]
@@ -505,6 +505,7 @@ export default function Dashboard({ onDrillDown, onUncatDrillDown }: DashboardPr
         parentId: string
         parentName: string
         parentTotal: number
+        directTotal: number
         children: { id: string; name: string; total: number }[]
       }[] = []
 
@@ -519,7 +520,7 @@ export default function Dashboard({ onDrillDown, onUncatDrillDown }: DashboardPr
         const parentTotal = directTotal + childRows.reduce((s, c) => s + c.total, 0)
 
         if (Math.abs(parentTotal) >= 0.005) {
-          rows.push({ parentId: parent.id, parentName: parent.name, parentTotal, children: childRows })
+          rows.push({ parentId: parent.id, parentName: parent.name, parentTotal, directTotal, children: childRows })
         }
       }
 
@@ -632,6 +633,11 @@ export default function Dashboard({ onDrillDown, onUncatDrillDown }: DashboardPr
                     {scaledParentBudget !== null && (
                       <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', fontWeight: 400 }}>
                         of {currencySymbol}{formatAmount(scaledParentBudget)}
+                      </div>
+                    )}
+                    {row.children.length > 0 && Math.abs(row.directTotal) >= 0.005 && (
+                      <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', fontWeight: 400 }}>
+                        incl. {currencySymbol}{formatAmount(Math.abs(row.directTotal))} direct
                       </div>
                     )}
                   </td>
