@@ -368,14 +368,18 @@ function DonutChart({ rows, total, uncatAmount, sym, onSliceClick, onUncatClick 
 
       {creditRows.length > 0 && (
         <div style={{ marginTop: '10px', width: '100%' }}>
+          <div style={{ fontSize: '10px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '4px' }}>
+            Credits / Refunds
+          </div>
           {creditRows.map(r => (
             <div key={r.parentId} style={{ fontSize: '11px', color: 'var(--color-income)', display: 'flex', justifyContent: 'space-between' }}>
-              <span>↩ {r.parentName} (credits/refunds)</span>
+              <span>↩ {r.parentName}</span>
               <span>{sym}{formatAmount(Math.abs(r.parentTotal))}</span>
             </div>
           ))}
-          <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '3px' }}>
-            Net spending: {fmt(total)}
+          <div style={{ borderTop: '1px solid var(--color-border)', marginTop: '6px', paddingTop: '5px', display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--color-text-muted)' }}>
+            <span>Net spending</span>
+            <span>{fmt(total)}</span>
           </div>
         </div>
       )}
