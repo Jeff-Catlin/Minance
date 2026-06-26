@@ -219,7 +219,13 @@ function DonutChart({ rows, total, uncatAmount, sym, onSliceClick, onUncatClick 
 }) {
   const [hovered, setHovered] = useState<string | null>(null)
 
-  if (rows.length === 0 || total === 0) return null
+  // Only positive-total rows can be drawn; negatives (refunds) sweep backward and corrupt the ring
+  const positiveRows = rows.filter(r => r.parentTotal > 0)
+  const creditRows   = rows.filter(r => r.parentTotal <= 0)
+  const positiveTotal = positiveRows.reduce((s, r) => s + r.parentTotal, 0)
+    + (uncatAmount && uncatAmount > 0 ? uncatAmount : 0)
+
+  if (positiveRows.length === 0 || positiveTotal === 0) return null
 
   const SZ = 280, CX = 140, CY = 140, OR = 118, IR = 73
 
@@ -229,8 +235,8 @@ function DonutChart({ rows, total, uncatAmount, sym, onSliceClick, onUncatClick 
 
   let angle = -Math.PI / 2
 
-  const slices = rows.map((row, i) => {
-    const pct = row.parentTotal / total
+  const slices = positiveRows.map((row, i) => {
+    const pct = row.parentTotal / positiveTotal
     const sweep = pct * 2 * Math.PI
     const start = angle
     const end   = angle + sweep
@@ -259,7 +265,7 @@ function DonutChart({ rows, total, uncatAmount, sym, onSliceClick, onUncatClick 
 
   // Add uncategorized slice if there are uncategorized expenses
   if (uncatAmount && uncatAmount > 0) {
-    const pct  = uncatAmount / total
+    const pct  = uncatAmount / positiveTotal
     const sweep = pct * 2 * Math.PI
     const start = angle
     const end   = angle + sweep
@@ -306,10 +312,10 @@ function DonutChart({ rows, total, uncatAmount, sym, onSliceClick, onUncatClick 
         {!active && (
           <>
             <text x={CX} y={CY - 7} textAnchor="middle" fontSize={11} fontWeight={500} fill="var(--color-text-muted)" fontFamily="Inter,system-ui,sans-serif">
-              Total Expenses
+              {creditRows.length > 0 ? 'Gross Spending' : 'Total Expenses'}
             </text>
             <text x={CX} y={CY + 15} textAnchor="middle" fontSize={21} fontWeight={700} fill="var(--color-expense)" fontFamily="Inter,system-ui,sans-serif">
-              {fmt(total)}
+              {fmt(creditRows.length > 0 ? positiveTotal : total)}
             </text>
           </>
         )}
@@ -359,6 +365,20 @@ function DonutChart({ rows, total, uncatAmount, sym, onSliceClick, onUncatClick 
           </div>
         ))}
       </div>
+
+      {creditRows.length > 0 && (
+        <div style={{ marginTop: '10px', width: '100%' }}>
+          {creditRows.map(r => (
+            <div key={r.parentId} style={{ fontSize: '11px', color: 'var(--color-income)', display: 'flex', justifyContent: 'space-between' }}>
+              <span>↩ {r.parentName} (credits/refunds)</span>
+              <span>{sym}{formatAmount(Math.abs(r.parentTotal))}</span>
+            </div>
+          ))}
+          <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '3px' }}>
+            Net spending: {fmt(total)}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
