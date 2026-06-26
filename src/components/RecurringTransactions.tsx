@@ -679,6 +679,13 @@ function AddRecurringModal({ categoryOptions, uniqueVendors, onSave, onClose }: 
 
 export default function RecurringTransactions({ typeFilter }: { typeFilter: 'expense' | 'income' }) {
   const { currencySymbol } = useSettings()
+  const accent = typeFilter === 'expense' ? '#F59E0B' : 'var(--color-primary-text)'
+  const accentBtn = (): React.CSSProperties => ({ ...s.btn('primary'), background: accent, borderColor: accent })
+  const accentToggleBtn = (active: boolean): React.CSSProperties => ({
+    ...s.toggleBtn(active),
+    background: active ? accent : 'transparent',
+    borderColor: active ? accent : 'var(--color-border)',
+  })
   const [recurring, setRecurring] = useState<RecurringEntry[]>([])
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [categories, setCategories] = useState<Category[]>([])
@@ -860,7 +867,7 @@ export default function RecurringTransactions({ typeFilter }: { typeFilter: 'exp
         <h2 style={s.heading}>Recurring Transactions</h2>
         <div style={{ display: 'flex', gap: '8px' }}>
           <button style={s.btn('ghost')} onClick={() => { setLoading(true); load() }}>↻ Query Transactions</button>
-          <button style={s.btn('primary')} onClick={() => setShowAddModal(true)}>+ Add Recurring</button>
+          <button style={accentBtn()} onClick={() => setShowAddModal(true)}>+ Add Recurring</button>
         </div>
       </div>
 
@@ -987,15 +994,15 @@ export default function RecurringTransactions({ typeFilter }: { typeFilter: 'exp
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-              <button style={s.toggleBtn(graphMode === 'historical')} onClick={() => setGraphMode('historical')}>Historical</button>
-              <button style={s.toggleBtn(graphMode === 'forecast')} onClick={() => setGraphMode('forecast')}>Forecast</button>
+              <button style={accentToggleBtn(graphMode === 'historical')} onClick={() => setGraphMode('historical')}>Historical</button>
+              <button style={accentToggleBtn(graphMode === 'forecast')} onClick={() => setGraphMode('forecast')}>Forecast</button>
             </div>
             <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-              <button style={s.toggleBtn(graphFilter === 'all')} onClick={() => setGraphFilter('all')}>All</button>
-              <button style={s.toggleBtn(graphFilter === 'monthly')} onClick={() => setGraphFilter('monthly')}>Monthly only</button>
+              <button style={accentToggleBtn(graphFilter === 'all')} onClick={() => setGraphFilter('all')}>All</button>
+              <button style={accentToggleBtn(graphFilter === 'monthly')} onClick={() => setGraphFilter('monthly')}>Monthly only</button>
               <div style={{ width: '1px', background: 'var(--color-border)', margin: '0 4px' }} />
               {([1, 3, 6, 12, 'ytd'] as GraphRange[]).map(r => (
-                <button key={r} style={s.toggleBtn(graphRange === r)} onClick={() => setGraphRange(r)}>
+                <button key={r} style={accentToggleBtn(graphRange === r)} onClick={() => setGraphRange(r)}>
                   {r === 'ytd' ? 'YTD' : r === 1 ? '1M' : r === 3 ? '3M' : r === 6 ? '6M' : '12M'}
                 </button>
               ))}
@@ -1008,7 +1015,7 @@ export default function RecurringTransactions({ typeFilter }: { typeFilter: 'exp
             No recurring transactions yet — confirm a suggestion or add one manually to see your chart.
           </p>
         ) : (
-          <BarChart data={graphData} sym={currencySymbol} color={typeFilter === 'expense' ? '#D97706' : 'var(--color-primary)'} />
+          <BarChart data={graphData} sym={currencySymbol} color={typeFilter === 'expense' ? '#F59E0B' : 'var(--color-primary)'} />
         )}
       </div>
 
@@ -1017,11 +1024,11 @@ export default function RecurringTransactions({ typeFilter }: { typeFilter: 'exp
         <p style={{ ...s.sectionTitle, margin: 0 }}>Confirmed Recurring</p>
         {recurring.length > 0 && (
           <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-            <button style={s.toggleBtn(cadenceFilter === '')} onClick={() => setCadenceFilter('')}>All</button>
+            <button style={accentToggleBtn(cadenceFilter === '')} onClick={() => setCadenceFilter('')}>All</button>
             {([...new Set(recurring.map(r => r.cadence))] as Cadence[])
               .sort((a, b) => CADENCE_ORDER[a] - CADENCE_ORDER[b])
               .map(c => (
-                <button key={c} style={s.toggleBtn(cadenceFilter === c)} onClick={() => setCadenceFilter(c)}>
+                <button key={c} style={accentToggleBtn(cadenceFilter === c)} onClick={() => setCadenceFilter(c)}>
                   {CADENCE_LABELS[c]}
                 </button>
               ))}
