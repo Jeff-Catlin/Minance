@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, Fragment } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Category, Transaction, TransactionSplit } from '../types'
 import { useSettings } from '../context/SettingsContext'
@@ -609,9 +609,8 @@ export default function Dashboard({ onDrillDown, onUncatDrillDown }: DashboardPr
             })()
 
             return (
-              <>
+              <Fragment key={row.parentId}>
                 <tr
-                  key={row.parentId}
                   style={s.parentRow}
                   onClick={() => row.children.length > 0 && toggleExpanded(row.parentId)}
                 >
@@ -673,7 +672,7 @@ export default function Dashboard({ onDrillDown, onUncatDrillDown }: DashboardPr
                     </td>
                   </tr>
                 )}
-              </>
+              </Fragment>
             )
           })}
         </tbody>
