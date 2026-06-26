@@ -19,6 +19,7 @@ interface RecurringEntry {
   cadence: Cadence
   expected_day: number | null
   expected_month: number | null
+  expected_months: string | null
   created_at: string
 }
 
@@ -86,6 +87,10 @@ const CADENCE_ORDER: Record<Cadence, number> = {
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December']
 
+const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+
 const DAY_NAMES_PLURAL = ['Sundays', 'Mondays', 'Tuesdays', 'Wednesdays', 'Thursdays', 'Fridays', 'Saturdays']
 
 function ordinal(n: number): string {
@@ -123,10 +128,26 @@ function computeSmartAmount(txns: Transaction[], cadence: Cadence): number {
   return recent.length > 0 ? recent.reduce((s, t) => s + t.amount, 0) / recent.length : avg
 }
 
-function formatExpectedDate(cadence: Cadence, day: number | null, month: number | null, dayOfWeek?: string | null): string | null {
-  if (cadence === 'weekly' || cadence === 'biweekly') return dayOfWeek ? `Expected on ${dayOfWeek}` : null
+function formatExpectedDate(cadence: Cadence, day: number | null, month: number | null, dayOfWeek?: string | null, expectedMonthsJson?: string | null): string | null {
+  if (cadence === 'weekly' || cadence === 'biweekly') {
+    if (day !== null && day >= 1 && day <= 7) return `Expected on ${DAY_NAMES[day - 1]}s`
+    return dayOfWeek ? `Expected on ${dayOfWeek}` : null
+  }
   if (!day) return null
   if (cadence === 'monthly') return `Expected around the ${ordinal(day)}`
+  if (cadence === 'quarterly' || cadence === 'biannually') {
+    if (expectedMonthsJson) {
+      try {
+        const months: number[] = JSON.parse(expectedMonthsJson)
+        if (months.length > 0) {
+          const monthStr = [...months].sort((a, b) => a - b).map(m => MONTH_SHORT[m - 1]).join(', ')
+          return `Expected around the ${ordinal(day)} of ${monthStr}`
+        }
+      } catch { /* ignore parse errors */ }
+    }
+    if (month) return `Expected around ${MONTH_NAMES[month - 1]} ${ordinal(day)}`
+    return `Expected around the ${ordinal(day)}`
+  }
   if (month) return `Expected around ${MONTH_NAMES[month - 1]} ${ordinal(day)}`
   return `Expected around the ${ordinal(day)}`
 }
@@ -566,30 +587,68 @@ const s = {
 
 interface AddModalProps {
   categoryOptions: { id: string; label: string; indent: boolean }[]
-  uniqueVendors: string[]
-  onSave: (vendor: string, category_id: string | null, cadence: Cadence, expected_day: number | null, expected_month: number | null) => Promise<string | null>
+  transactions: Transaction[]
+  onSave: (vendor: string, category_id: string | null, cadence: Cadence, expected_day: number | null, expected_month: number | null, expected_months: number[] | null) => Promise<string | null>
   onClose: () => void
 }
 
-function AddRecurringModal({ categoryOptions, uniqueVendors, onSave, onClose }: AddModalProps) {
-  const [vendor, setVendor] = useState('')
+function AddRecurringModal({ categoryOptions, transactions, onSave, onClose }: AddModalProps) {
   const [categoryId, setCategoryId] = useState('')
+  const [vendor, setVendor] = useState('')
   const [cadence, setCadence] = useState<Cadence>('monthly')
   const [expectedDay, setExpectedDay] = useState('')
   const [expectedMonth, setExpectedMonth] = useState('')
+  const [expectedMonths, setExpectedMonths] = useState<Set<number>>(new Set())
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+
+  const vendorsByCategory = useMemo(() => {
+    const map = new Map<string, Set<string>>()
+    for (const t of transactions) {
+      const key = t.category_id ?? ''
+      if (!map.has(key)) map.set(key, new Set())
+      map.get(key)!.add(t.vendor)
+    }
+    return map
+  }, [transactions])
+
+  const filteredVendors = useMemo(() => {
+    if (!categoryId) return [...new Set(transactions.map(t => t.vendor))].sort()
+    return [...(vendorsByCategory.get(categoryId) ?? [])].sort()
+  }, [categoryId, vendorsByCategory, transactions])
+
+  function handleCategoryChange(newCat: string) {
+    setCategoryId(newCat)
+    setVendor('')
+  }
+
+  function handleCadenceChange(newCadence: string) {
+    setCadence(newCadence as Cadence)
+    setExpectedDay('')
+    setExpectedMonth('')
+    setExpectedMonths(new Set())
+  }
+
+  function toggleMonth(m: number) {
+    const next = new Set(expectedMonths)
+    if (next.has(m)) next.delete(m) else next.add(m)
+    setExpectedMonths(next)
+  }
 
   async function handleSave() {
     if (!vendor.trim()) { setError('Please enter a vendor name.'); return }
     const day = expectedDay ? parseInt(expectedDay) : null
     const month = expectedMonth ? parseInt(expectedMonth) : null
+    const months = expectedMonths.size > 0 ? [...expectedMonths].sort((a, b) => a - b) : null
     setSaving(true)
-    const err = await onSave(vendor.trim(), categoryId === '' ? null : categoryId, cadence, day, month)
+    const err = await onSave(vendor.trim(), categoryId || null, cadence, day, month, months)
     setSaving(false)
-    if (err) setError(err)
-    else onClose()
+    if (err) setError(err) else onClose()
   }
+
+  const isWeekly = cadence === 'weekly' || cadence === 'biweekly'
+  const isMultiMonth = cadence === 'quarterly' || cadence === 'biannually'
+  const isSingleMonth = cadence === 'annually'
 
   return (
     <div style={s.overlay} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
@@ -597,34 +656,41 @@ function AddRecurringModal({ categoryOptions, uniqueVendors, onSave, onClose }: 
         <p style={{ fontSize: '17px', fontWeight: 600, color: 'var(--color-text)', margin: '0 0 4px 0' }}>
           Add Recurring Transaction
         </p>
-        <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', margin: '0 0 4px 0' }}>
+        <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', margin: '0 0 16px 0' }}>
           Track a regular charge by vendor and category.
         </p>
 
-        <label style={s.modalLabel}>Vendor</label>
-        <input
-          list="vendor-list"
-          style={s.input}
-          value={vendor}
-          onChange={e => setVendor(e.target.value)}
-          placeholder="e.g. Netflix"
-          autoFocus
-          onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') onClose() }}
-        />
-        <datalist id="vendor-list">
-          {uniqueVendors.map(v => <option key={v} value={v} />)}
-        </datalist>
-
         <label style={s.modalLabel}>Category</label>
-        <select style={s.select} value={categoryId} onChange={e => setCategoryId(e.target.value)}>
+        <select style={s.select} value={categoryId} onChange={e => handleCategoryChange(e.target.value)}>
           <option value="">Uncategorized</option>
           {categoryOptions.map(opt => (
             <option key={opt.id} value={opt.id}>{opt.indent ? `  ${opt.label}` : opt.label}</option>
           ))}
         </select>
 
+        <label style={s.modalLabel}>
+          Vendor
+          {categoryId && filteredVendors.length > 0 && (
+            <span style={{ fontWeight: 400, color: 'var(--color-text-muted)', marginLeft: '6px' }}>
+              ({filteredVendors.length} in this category)
+            </span>
+          )}
+        </label>
+        <input
+          list="add-recurring-vendor-list"
+          style={s.input}
+          value={vendor}
+          onChange={e => setVendor(e.target.value)}
+          placeholder={categoryId ? 'Type or pick a vendor…' : 'e.g. Netflix'}
+          autoFocus
+          onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') onClose() }}
+        />
+        <datalist id="add-recurring-vendor-list">
+          {filteredVendors.map(v => <option key={v} value={v} />)}
+        </datalist>
+
         <label style={s.modalLabel}>Cadence</label>
-        <select style={s.select} value={cadence} onChange={e => { setCadence(e.target.value as Cadence); setExpectedMonth('') }}>
+        <select style={s.select} value={cadence} onChange={e => handleCadenceChange(e.target.value)}>
           <option value="weekly">Weekly</option>
           <option value="biweekly">Biweekly</option>
           <option value="monthly">Monthly</option>
@@ -633,29 +699,48 @@ function AddRecurringModal({ categoryOptions, uniqueVendors, onSave, onClose }: 
           <option value="annually">Annually</option>
         </select>
 
-        {cadence !== 'weekly' && cadence !== 'biweekly' && (
-          <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
-            <div style={{ flex: 1 }}>
-              <label style={{ ...s.modalLabel, marginTop: 0 }}>Expected day</label>
-              <select style={s.select} value={expectedDay} onChange={e => setExpectedDay(e.target.value)}>
-                <option value="">Not set</option>
-                {Array.from({ length: 31 }, (_, i) => i + 1).map(d => (
-                  <option key={d} value={d}>{ordinal(d)}</option>
-                ))}
-              </select>
+        <label style={{ ...s.modalLabel }}>{isWeekly ? 'Expected day of week' : 'Expected day of month'}</label>
+        <select style={s.select} value={expectedDay} onChange={e => setExpectedDay(e.target.value)}>
+          <option value="">Not set</option>
+          {isWeekly
+            ? DAY_NAMES.map((d, i) => <option key={i + 1} value={i + 1}>{d}</option>)
+            : Array.from({ length: 31 }, (_, i) => i + 1).map(d => <option key={d} value={d}>{ordinal(d)}</option>)
+          }
+        </select>
+
+        {isSingleMonth && (
+          <>
+            <label style={s.modalLabel}>Expected month</label>
+            <select style={s.select} value={expectedMonth} onChange={e => setExpectedMonth(e.target.value)}>
+              <option value="">Not set</option>
+              {MONTH_NAMES.map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
+            </select>
+          </>
+        )}
+
+        {isMultiMonth && (
+          <>
+            <label style={s.modalLabel}>
+              Expected months
+              <span style={{ fontWeight: 400, color: 'var(--color-text-muted)', marginLeft: '6px' }}>select all that apply</span>
+            </label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              {MONTH_SHORT.map((m, i) => {
+                const monthNum = i + 1
+                const active = expectedMonths.has(monthNum)
+                return (
+                  <button
+                    key={monthNum}
+                    type="button"
+                    onClick={() => toggleMonth(monthNum)}
+                    style={{ ...s.toggleBtn(active), padding: '4px 10px', fontSize: '12px' }}
+                  >
+                    {m}
+                  </button>
+                )
+              })}
             </div>
-            {cadence !== 'monthly' && (
-              <div style={{ flex: 1 }}>
-                <label style={{ ...s.modalLabel, marginTop: 0 }}>Expected month</label>
-                <select style={s.select} value={expectedMonth} onChange={e => setExpectedMonth(e.target.value)}>
-                  <option value="">Not set</option>
-                  {MONTH_NAMES.map((m, i) => (
-                    <option key={i + 1} value={i + 1}>{m}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-          </div>
+          </>
         )}
 
         {error && (
@@ -1121,9 +1206,9 @@ export default function RecurringTransactions({ typeFilter, onSuggestionCount }:
                   </div>
                   <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '3px' }}>
                     {cat?.name ?? 'Uncategorized'}
-                    {formatExpectedDate(entry.cadence, entry.expected_day, entry.expected_month, entryDayOfWeek) && (
+                    {formatExpectedDate(entry.cadence, entry.expected_day, entry.expected_month, entryDayOfWeek, entry.expected_months) && (
                       <span style={{ marginLeft: '8px', color: 'var(--color-primary-text)' }}>
-                        · {formatExpectedDate(entry.cadence, entry.expected_day, entry.expected_month, entryDayOfWeek)}
+                        · {formatExpectedDate(entry.cadence, entry.expected_day, entry.expected_month, entryDayOfWeek, entry.expected_months)}
                       </span>
                     )}
                   </div>
@@ -1248,9 +1333,12 @@ export default function RecurringTransactions({ typeFilter, onSuggestionCount }:
       {showAddModal && (
         <AddRecurringModal
           categoryOptions={categoryOptions}
-          uniqueVendors={uniqueVendors}
-          onSave={async (vendor, category_id, cadence, expected_day, expected_month) => {
-            const { error } = await supabase.from('recurring_transactions').insert({ vendor, category_id, cadence, expected_day, expected_month })
+          transactions={transactions}
+          onSave={async (vendor, category_id, cadence, expected_day, expected_month, expected_months) => {
+            const { error } = await supabase.from('recurring_transactions').insert({
+              vendor, category_id, cadence, expected_day, expected_month,
+              expected_months: expected_months ? JSON.stringify(expected_months) : null,
+            })
             if (error) return error.message
             load()
             return null
