@@ -1,22 +1,21 @@
 import { useSettings, EXPENSE_BAR_DEFAULTS, SAVINGS_BAR_DEFAULTS } from '../context/SettingsContext'
 
-// Bar geometry: zero marker at 12%, goal marker at 88%, leaving 12% each side for under/overflow
-const ZERO_PCT  = 12
+// Bar geometry: zero marker at 5%, goal marker at 88%
+const ZERO_PCT  = 5
 const GOAL_PCT  = 88
-const FILL_SPAN = GOAL_PCT - ZERO_PCT   // 76
+const FILL_SPAN = GOAL_PCT - ZERO_PCT   // 83
 
-const GOAL_MARKER_COLOR_EXPENSE = '#374151'   // dark charcoal
-const GOAL_MARKER_COLOR_SAVINGS = '#F59E0B'   // gold
-const NEGATIVE_FILL_EXPENSE     = 'var(--color-income)'   // credit on expense = good
-const NEGATIVE_FILL_SAVINGS     = 'var(--color-expense)'  // withdrawal = bad
+const GOAL_MARKER_COLOR_EXPENSE = '#374151'
+const GOAL_MARKER_COLOR_SAVINGS = '#F59E0B'
+const NEGATIVE_FILL_EXPENSE     = 'var(--color-income)'  // credit = good
+const NEGATIVE_FILL_SAVINGS     = 'var(--color-expense)' // withdrawal = bad
 
 interface ProgressBarProps {
   value: number
   target: number | null
   type: 'expense' | 'savings'
   height?: number
-  // For savings, each goal type has its own brand color for standard mode
-  baseColor?: string
+  baseColor?: string  // goal-type brand color used in savings standard mode
 }
 
 export default function ProgressBar({ value, target, type, height = 6, baseColor }: ProgressBarProps) {
@@ -29,37 +28,32 @@ export default function ProgressBar({ value, target, type, height = 6, baseColor
   if (!hasBudget) return null
 
   const normalized = value / target!
-
-  // Position of the "tip" of the bar along the track [0..100]
-  const tipPct = ZERO_PCT + normalized * FILL_SPAN
+  const tipPct     = ZERO_PCT + normalized * FILL_SPAN
   const clampedTip = Math.max(0, Math.min(100, tipPct))
 
-  // For positive fills: main zone (0..target) and overflow (target..)
-  const mainRight    = Math.min(clampedTip, GOAL_PCT)
-  const mainWidth    = Math.max(0, mainRight - ZERO_PCT)
-  const overflowWidth = normalized > 1 ? Math.min(clampedTip - GOAL_PCT, 100 - GOAL_PCT) : 0
-
-  // For negative fills: extends left of the zero marker
-  const negLeft  = clampedTip
-  const negWidth = normalized < 0 ? ZERO_PCT - Math.max(0, clampedTip) : 0
-
-  // Color selection
-  const standardUnder = baseColor ?? (type === 'savings' ? '#22C55E' : '#22C55E')
-
-  function pickFillColor(): string {
-    if (cfg.mode === 'standard') return standardUnder
-    return cfg.colorUnder
-  }
-
-  function pickOverflowColor(): string {
+  // Single fill color — whole bar is one color, no split at goal marker
+  function getFillColor(): string {
+    if (normalized < 0) {
+      return type === 'expense' ? NEGATIVE_FILL_EXPENSE : NEGATIVE_FILL_SAVINGS
+    }
     if (cfg.mode === 'standard') {
+      if (normalized <= 1) return baseColor ?? '#22C55E'
       return type === 'savings' ? '#10B981' : '#EF4444'
     }
-    const withinLeniency = normalized <= 1 + cfg.leniencyPct / 100
-    return withinLeniency ? cfg.colorWarning : cfg.colorOver
+    // custom mode
+    if (normalized <= 1) return cfg.colorUnder
+    if (normalized <= 1 + cfg.leniencyPct / 100) return cfg.colorWarning
+    return cfg.colorOver
   }
 
-  const negFillColor = type === 'expense' ? NEGATIVE_FILL_EXPENSE : NEGATIVE_FILL_SAVINGS
+  const fillColor = getFillColor()
+
+  // Fill runs from ZERO_PCT to clampedTip (positive) or clampedTip to ZERO_PCT (negative)
+  const fillLeft  = normalized >= 0 ? ZERO_PCT : Math.max(0, clampedTip)
+  const fillWidth = normalized >= 0
+    ? Math.max(0, clampedTip - ZERO_PCT)
+    : Math.max(0, ZERO_PCT - Math.max(0, clampedTip))
+
   const goalMarkerColor = type === 'savings' ? GOAL_MARKER_COLOR_SAVINGS : GOAL_MARKER_COLOR_EXPENSE
 
   const track: React.CSSProperties = {
@@ -69,17 +63,17 @@ export default function ProgressBar({ value, target, type, height = 6, baseColor
     borderRadius: `${height}px`,
   }
 
-  const seg = (left: number, width: number, color: string, radius = height): React.CSSProperties => ({
+  const fill: React.CSSProperties = {
     position: 'absolute',
     top: 0,
-    left: `${left}%`,
-    width: `${width}%`,
+    left: `${fillLeft}%`,
+    width: `${fillWidth}%`,
     height: '100%',
-    background: color,
-    borderRadius: `${radius}px`,
-  })
+    background: fillColor,
+    borderRadius: `${height}px`,
+  }
 
-  const tick = (left: number, color: string, opacity = 1): React.CSSProperties => ({
+  const tick = (left: number, color: string, opacity: number): React.CSSProperties => ({
     position: 'absolute',
     top: '-1px',
     bottom: '-1px',
@@ -94,18 +88,9 @@ export default function ProgressBar({ value, target, type, height = 6, baseColor
 
   return (
     <div style={track}>
-      {/* Negative fill (left of zero) */}
-      {negWidth > 0 && <div style={seg(negLeft, negWidth, negFillColor)} />}
-
-      {/* Normal fill (zero → goal) */}
-      {mainWidth > 0 && <div style={seg(ZERO_PCT, mainWidth, pickFillColor())} />}
-
-      {/* Overflow fill (past goal marker) */}
-      {overflowWidth > 0 && <div style={seg(GOAL_PCT, overflowWidth, pickOverflowColor())} />}
-
+      {fillWidth > 0 && <div style={fill} />}
       {/* Zero marker */}
       <div style={tick(ZERO_PCT, 'var(--color-text-muted)', 0.35)} />
-
       {/* Goal marker */}
       <div style={tick(GOAL_PCT, goalMarkerColor, 0.75)} />
     </div>
