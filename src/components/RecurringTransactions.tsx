@@ -921,10 +921,22 @@ export default function RecurringTransactions({ typeFilter, onSuggestionCount }:
 
   useEffect(() => { onSuggestionCount?.(suggestions.length) }, [suggestions.length, onSuggestionCount])
 
+  // Expand selected parent IDs to also match their children in the actual chart filter
+  const effectiveCategoryFilter = useMemo(() => {
+    if (graphCategoryFilter.size === 0) return graphCategoryFilter
+    const expanded = new Set(graphCategoryFilter)
+    for (const id of graphCategoryFilter) {
+      for (const cat of categories) {
+        if (cat.parent_id === id) expanded.add(cat.id)
+      }
+    }
+    return expanded
+  }, [graphCategoryFilter, categories])
+
   const graphData = useMemo(() => {
-    if (graphMode === 'historical') return buildHistoricalData(nonExcludedTxns, typeFilteredRecurring, graphFilter, graphRange, graphCategoryFilter)
-    return buildForecastData(nonExcludedTxns, typeFilteredRecurring, graphFilter, graphRange, graphCategoryFilter)
-  }, [graphMode, graphFilter, graphRange, graphCategoryFilter, nonExcludedTxns, typeFilteredRecurring])
+    if (graphMode === 'historical') return buildHistoricalData(nonExcludedTxns, typeFilteredRecurring, graphFilter, graphRange, effectiveCategoryFilter)
+    return buildForecastData(nonExcludedTxns, typeFilteredRecurring, graphFilter, graphRange, effectiveCategoryFilter)
+  }, [graphMode, graphFilter, graphRange, effectiveCategoryFilter, nonExcludedTxns, typeFilteredRecurring])
 
   const monthlyAvg = useMemo(() => {
     const nonZero = graphData.filter(d => d.amount > 0)
@@ -951,18 +963,22 @@ export default function RecurringTransactions({ typeFilter, onSuggestionCount }:
   }, [typeFilteredRecurring, graphFilter])
 
   const availableCadences = useMemo(() => {
-    const relevant = graphCategoryFilter.size === 0
+    const relevant = effectiveCategoryFilter.size === 0
       ? typeFilteredRecurring
-      : typeFilteredRecurring.filter(r => r.category_id !== null && graphCategoryFilter.has(r.category_id))
+      : typeFilteredRecurring.filter(r => r.category_id !== null && effectiveCategoryFilter.has(r.category_id))
     return new Set(relevant.map(r => r.cadence))
-  }, [typeFilteredRecurring, graphCategoryFilter])
+  }, [typeFilteredRecurring, effectiveCategoryFilter])
 
   // Auto-deselect picks that become invalid when the other filter changes
   useEffect(() => {
     if (graphCategoryFilter.size === 0) return
-    const next = new Set([...graphCategoryFilter].filter(id => availableCategoryIds.has(id)))
+    const next = new Set([...graphCategoryFilter].filter(id => {
+      if (availableCategoryIds.has(id)) return true
+      // Keep parent IDs whose children are still available
+      return categories.some(c => c.parent_id === id && availableCategoryIds.has(c.id))
+    }))
     if (next.size !== graphCategoryFilter.size) setGraphCategoryFilter(next)
-  }, [availableCategoryIds])
+  }, [availableCategoryIds, categories])
 
   useEffect(() => {
     if (graphFilter.size === 0) return
@@ -972,7 +988,7 @@ export default function RecurringTransactions({ typeFilter, onSuggestionCount }:
 
   // Hierarchical category list for the dropdown
   const categoryHierarchy = useMemo(() => {
-    type Node = { cat: Category; children: Category[]; hasDirectItems: boolean }
+    type Node = { cat: Category; children: Category[] }
     const nodes: Node[] = []
     for (const cat of categories) {
       if (cat.parent_id !== null) continue
@@ -981,7 +997,7 @@ export default function RecurringTransactions({ typeFilter, onSuggestionCount }:
         .sort((a, b) => a.name.localeCompare(b.name))
       const hasDirectItems = availableCategoryIds.has(cat.id)
       if (!hasDirectItems && children.length === 0) continue
-      nodes.push({ cat, children, hasDirectItems })
+      nodes.push({ cat, children })
     }
     return nodes.sort((a, b) => a.cat.name.localeCompare(b.cat.name))
   }, [categories, availableCategoryIds])
@@ -1271,26 +1287,22 @@ export default function RecurringTransactions({ typeFilter, onSuggestionCount }:
                         borderRadius: '8px', padding: '6px 0', boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
                         minWidth: '190px', maxHeight: '280px', overflowY: 'auto',
                       }}>
-                        {categoryHierarchy.map(({ cat, children, hasDirectItems }) => {
+                        {categoryHierarchy.map(({ cat, children }) => {
                           const isExpanded = expandedCategoryParents.has(cat.id)
                           const hasChildren = children.length > 0
                           return (
                             <div key={cat.id}>
                               <div style={{ display: 'flex', alignItems: 'center', padding: '6px 14px', gap: '6px' }}>
-                                {hasDirectItems ? (
-                                  <input
-                                    type="checkbox"
-                                    checked={graphCategoryFilter.has(cat.id)}
-                                    onChange={() => {
-                                      const next = new Set(graphCategoryFilter)
-                                      graphCategoryFilter.has(cat.id) ? next.delete(cat.id) : next.add(cat.id)
-                                      setGraphCategoryFilter(next)
-                                    }}
-                                    style={{ cursor: 'pointer', accentColor: accent, flexShrink: 0 }}
-                                  />
-                                ) : (
-                                  <span style={{ width: '13px', flexShrink: 0 }} />
-                                )}
+                                <input
+                                  type="checkbox"
+                                  checked={graphCategoryFilter.has(cat.id)}
+                                  onChange={() => {
+                                    const next = new Set(graphCategoryFilter)
+                                    graphCategoryFilter.has(cat.id) ? next.delete(cat.id) : next.add(cat.id)
+                                    setGraphCategoryFilter(next)
+                                  }}
+                                  style={{ cursor: 'pointer', accentColor: accent, flexShrink: 0 }}
+                                />
                                 <span style={{ fontSize: '13px', color: 'var(--color-text)', flex: 1, userSelect: 'none' }}>{cat.name}</span>
                                 {hasChildren && (
                                   <button
