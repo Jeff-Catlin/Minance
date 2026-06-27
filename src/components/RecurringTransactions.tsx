@@ -234,9 +234,12 @@ function buildHistoricalData(
   recurring: RecurringEntry[],
   filter: GraphFilter,
   range: GraphRange,
+  categoryFilter: Set<string>,
 ): BarPoint[] {
   const now = new Date()
-  const filtered = filter.size > 0 ? recurring.filter(r => filter.has(r.cadence)) : recurring
+  const filtered = recurring
+    .filter(r => filter.size === 0 || filter.has(r.cadence))
+    .filter(r => categoryFilter.size === 0 || (r.category_id !== null && categoryFilter.has(r.category_id)))
   const data: BarPoint[] = []
 
   const monthsBack = range === 'ytd' ? now.getMonth() : (range as number) - 1
@@ -268,9 +271,12 @@ function buildForecastData(
   recurring: RecurringEntry[],
   filter: GraphFilter,
   range: GraphRange,
+  categoryFilter: Set<string>,
 ): BarPoint[] {
   const now = new Date()
-  const filtered = filter.size > 0 ? recurring.filter(r => filter.has(r.cadence)) : recurring
+  const filtered = recurring
+    .filter(r => filter.size === 0 || filter.has(r.cadence))
+    .filter(r => categoryFilter.size === 0 || (r.category_id !== null && categoryFilter.has(r.category_id)))
   const data: BarPoint[] = []
 
   const monthsAhead = range === 'ytd' ? 12 - now.getMonth() : range as number
@@ -828,6 +834,9 @@ export default function RecurringTransactions({ typeFilter, onSuggestionCount }:
   const [graphFilter, setGraphFilter] = useState<GraphFilter>(new Set())
   const [graphCadenceOpen, setGraphCadenceOpen] = useState(false)
   const graphCadenceRef = useRef<HTMLDivElement>(null)
+  const [graphCategoryFilter, setGraphCategoryFilter] = useState<Set<string>>(new Set())
+  const [graphCategoryOpen, setGraphCategoryOpen] = useState(false)
+  const graphCategoryRef = useRef<HTMLDivElement>(null)
   const [graphRange, setGraphRange] = useState<GraphRange>(6)
   const [showAddModal, setShowAddModal] = useState(false)
   const [confirmingKey, setConfirmingKey] = useState<string | null>(null)
@@ -871,6 +880,17 @@ export default function RecurringTransactions({ typeFilter, onSuggestionCount }:
     return () => document.removeEventListener('mousedown', onMouseDown)
   }, [graphCadenceOpen])
 
+  useEffect(() => {
+    if (!graphCategoryOpen) return
+    function onMouseDown(e: MouseEvent) {
+      if (graphCategoryRef.current && !graphCategoryRef.current.contains(e.target as Node)) {
+        setGraphCategoryOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onMouseDown)
+    return () => document.removeEventListener('mousedown', onMouseDown)
+  }, [graphCategoryOpen])
+
   // ── Derived data ─────────────────────────────────────────────────────────────
 
   const nonExcludedTxns = useMemo(
@@ -901,9 +921,9 @@ export default function RecurringTransactions({ typeFilter, onSuggestionCount }:
   useEffect(() => { onSuggestionCount?.(suggestions.length) }, [suggestions.length, onSuggestionCount])
 
   const graphData = useMemo(() => {
-    if (graphMode === 'historical') return buildHistoricalData(nonExcludedTxns, typeFilteredRecurring, graphFilter, graphRange)
-    return buildForecastData(nonExcludedTxns, typeFilteredRecurring, graphFilter, graphRange)
-  }, [graphMode, graphFilter, graphRange, nonExcludedTxns, typeFilteredRecurring])
+    if (graphMode === 'historical') return buildHistoricalData(nonExcludedTxns, typeFilteredRecurring, graphFilter, graphRange, graphCategoryFilter)
+    return buildForecastData(nonExcludedTxns, typeFilteredRecurring, graphFilter, graphRange, graphCategoryFilter)
+  }, [graphMode, graphFilter, graphRange, graphCategoryFilter, nonExcludedTxns, typeFilteredRecurring])
 
   const monthlyAvg = useMemo(() => {
     const nonZero = graphData.filter(d => d.amount > 0)
@@ -912,6 +932,14 @@ export default function RecurringTransactions({ typeFilter, onSuggestionCount }:
   }, [graphData])
 
   const catMap = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories])
+
+  const recurringCategories = useMemo(() => {
+    const ids = new Set(typeFilteredRecurring.map(r => r.category_id).filter((id): id is string => id !== null))
+    return Array.from(ids)
+      .map(id => catMap.get(id))
+      .filter((c): c is Category => c !== undefined)
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }, [typeFilteredRecurring, catMap])
 
   const parents = useMemo(() => categories.filter(c => c.parent_id === null), [categories])
   const categoryOptions = parents.flatMap(p => [
@@ -1181,6 +1209,46 @@ export default function RecurringTransactions({ typeFilter, onSuggestionCount }:
                   {r === 'ytd' ? 'YTD' : r === 1 ? '1M' : r === 3 ? '3M' : r === 6 ? '6M' : '12M'}
                 </button>
               ))}
+              {recurringCategories.length > 0 && (
+                <>
+                  <div style={{ width: '1px', background: 'var(--color-border)', margin: '0 4px' }} />
+                  <div ref={graphCategoryRef} style={{ position: 'relative' }}>
+                    <button
+                      style={accentToggleBtn(graphCategoryFilter.size > 0)}
+                      onClick={() => setGraphCategoryOpen(o => !o)}
+                    >
+                      Category{graphCategoryFilter.size > 0 ? ` (${graphCategoryFilter.size})` : ''}
+                    </button>
+                    {graphCategoryOpen && (
+                      <div style={{
+                        position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 200,
+                        background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+                        borderRadius: '8px', padding: '6px 0', boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+                        minWidth: '170px',
+                      }}>
+                        {recurringCategories.map(c => {
+                          const checked = graphCategoryFilter.has(c.id)
+                          return (
+                            <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 14px', cursor: 'pointer', fontSize: '13px', color: 'var(--color-text)' }}>
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => {
+                                  const next = new Set(graphCategoryFilter)
+                                  checked ? next.delete(c.id) : next.add(c.id)
+                                  setGraphCategoryFilter(next)
+                                }}
+                                style={{ cursor: 'pointer', accentColor: accent }}
+                              />
+                              {c.name}
+                            </label>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
