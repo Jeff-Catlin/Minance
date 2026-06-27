@@ -373,7 +373,7 @@ function BarChart({ data, sym, color }: { data: BarPoint[]; sym: string; color: 
       <div style={{ overflowX: 'auto' }}>
         <svg
           width={totalW}
-          height={BAR_H + 28}
+          height={BAR_H + 44}
           style={{ display: 'block', minWidth: '100%', overflow: 'visible' }}
         >
           {data.map((d, i) => {
@@ -393,10 +393,16 @@ function BarChart({ data, sym, color }: { data: BarPoint[]; sym: string; color: 
                   fill={isHov ? color : barH > 0 ? color : 'var(--color-border)'}
                   rx={3} opacity={isHov ? 1 : d.amount === 0 ? 0.3 : 0.65}
                 />
-                <text x={x + BAR_W / 2} y={BAR_H + 18} textAnchor="middle" fontSize={11}
+                <text x={x + BAR_W / 2} y={BAR_H + 16} textAnchor="middle" fontSize={11}
                   fill={isHov ? color : 'var(--color-text-muted)'} fontFamily="inherit">
                   {d.label}
                 </text>
+                {d.amount > 0 && (
+                  <text x={x + BAR_W / 2} y={BAR_H + 31} textAnchor="middle" fontSize={10}
+                    fill={isHov ? color : 'var(--color-text-muted)'} fontFamily="inherit" opacity={0.8}>
+                    {sym}{formatAmount(d.amount)}
+                  </text>
+                )}
               </g>
             )
           })}
