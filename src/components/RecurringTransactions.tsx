@@ -399,8 +399,8 @@ function BarChart({ data, sym, color }: { data: BarPoint[]; sym: string; color: 
                 </text>
                 {d.amount > 0 && (
                   <text x={x + BAR_W / 2} y={BAR_H + 31} textAnchor="middle" fontSize={10}
-                    fill={isHov ? color : 'var(--color-text-muted)'} fontFamily="inherit" opacity={0.8}>
-                    {sym}{formatAmount(d.amount)}
+                    fill={color} fontFamily="inherit" opacity={isHov ? 1 : 0.75}>
+                    {sym}{Math.round(d.amount).toLocaleString('en-US')}
                   </text>
                 )}
               </g>
