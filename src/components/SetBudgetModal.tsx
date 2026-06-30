@@ -167,12 +167,22 @@ export default function SetBudgetModal({ category, existingBudget, year, onSave,
   const [cadence, setCadence] = useState(eb?.cadence ?? 'monthly')
   const [refDate, setRefDate] = useState(eb?.reference_date ?? '')
   const [occAmt, setOccAmt] = useState(eb?.amount_per_occurrence !== null && eb?.amount_per_occurrence !== undefined ? String(eb.amount_per_occurrence) : '')
+  const [linkedRecId, setLinkedRecId] = useState<string | null>(eb?.linked_recurring_id ?? null)
+  const [recurringEntries, setRecurringEntries] = useState<{ id: string; vendor: string; cadence: string }[]>([])
+  const [linkLoading, setLinkLoading] = useState(false)
 
   // ── UI state ──────────────────────────────────────────────────────────────
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
   const modeChanged = eb && eb.mode !== mode
+
+  // ── Fetch recurring entries for this category ─────────────────────────────
+  useEffect(() => {
+    supabase.from('recurring_transactions').select('id, vendor, cadence').eq('category_id', category.id).then(({ data }) => {
+      setRecurringEntries(data ?? [])
+    })
+  }, [category.id])
 
   // ── Cadence preview ───────────────────────────────────────────────────────
   const cadencePreview = useMemo(() => {
@@ -214,6 +224,27 @@ export default function SetBudgetModal({ category, existingBudget, year, onSave,
 
     setMonthAmts(totals.map(v => v > 0 ? v.toFixed(2) : ''))
     setFillLoading(false)
+  }
+
+  // ── Link to recurring entry ───────────────────────────────────────────────
+  async function handleLinkEntry(id: string) {
+    setLinkedRecId(id || null)
+    if (!id) return
+    const entry = recurringEntries.find(e => e.id === id)
+    if (!entry) return
+    setCadence(entry.cadence)
+    setLinkLoading(true)
+    const { data } = await supabase.from('transactions')
+      .select('date, amount')
+      .eq('vendor', entry.vendor)
+      .eq('category_id', category.id)
+      .order('date', { ascending: false })
+      .limit(1)
+    setLinkLoading(false)
+    if (data && data.length > 0) {
+      setRefDate(data[0].date)
+      setOccAmt(String(data[0].amount))
+    }
   }
 
   // ── Apply % ───────────────────────────────────────────────────────────────
@@ -267,6 +298,7 @@ export default function SetBudgetModal({ category, existingBudget, year, onSave,
       record.cadence = cadence
       record.reference_date = refDate
       record.amount_per_occurrence = n
+      record.linked_recurring_id = linkedRecId
       record.monthly_amount = null
       record.monthly_amounts = null
       record.variable_rollover_source = null
@@ -409,6 +441,30 @@ export default function SetBudgetModal({ category, existingBudget, year, onSave,
         {/* ── Cadence ──────────────────────────────────────────────────────── */}
         {mode === 'cadence' && (
           <div>
+            {/* Recurring entry link */}
+            {recurringEntries.length > 0 && (
+              <div style={{ marginBottom: '16px', padding: '12px', borderRadius: '8px', background: 'var(--color-bg)', border: '1px solid var(--color-border)' }}>
+                <label style={{ ...lbl, marginTop: 0 }}>
+                  Link to recurring entry <span style={{ fontWeight: 400 }}>(auto-fills fields below)</span>
+                </label>
+                <select
+                  value={linkedRecId ?? ''}
+                  onChange={e => handleLinkEntry(e.target.value)}
+                  style={{ ...inp, cursor: 'pointer' }}
+                >
+                  <option value="">— Enter manually —</option>
+                  {recurringEntries.map(e => (
+                    <option key={e.id} value={e.id}>{e.vendor}</option>
+                  ))}
+                </select>
+                {linkLoading && (
+                  <p style={{ margin: '6px 0 0', fontSize: '12px', color: 'var(--color-text-muted)' }}>
+                    Fetching latest transaction…
+                  </p>
+                )}
+              </div>
+            )}
+
             <label style={lbl}>Cadence</label>
             <select value={cadence} onChange={e => setCadence(e.target.value)}
               style={{ ...inp, cursor: 'pointer' }}>
