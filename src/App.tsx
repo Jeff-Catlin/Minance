@@ -42,6 +42,14 @@ export default function App() {
     setTimeout(() => { setTxFilter(null); setTxInitialSubTab(null) }, 100)
   }
 
+  function handleCategoryMonthDrillDown(categoryId: string, from: string, to: string) {
+    setTxFilter({ categoryId, from, to })
+    setTxInitialSubTab('all')
+    setTxFilterKey(k => k + 1)
+    setScreen('transactions')
+    setTimeout(() => { setTxFilter(null); setTxInitialSubTab(null) }, 100)
+  }
+
   function handleUncatDrillDown() {
     setTxInitialSubTab('uncategorized')
     setTxFilterKey(k => k + 1)
@@ -176,7 +184,7 @@ export default function App() {
       <main>
         {screen === 'dashboard'    && <Dashboard onDrillDown={handleDrillDown} onUncatDrillDown={handleUncatDrillDown} />}
         {screen === 'transactions' && <TransactionsScreen initialFilter={txFilter} filterKey={txFilterKey} initialSubTab={txInitialSubTab ?? undefined} />}
-        {screen === 'categories'   && <CategoryManager />}
+        {screen === 'categories'   && <CategoryManager onMonthDrillDown={handleCategoryMonthDrillDown} />}
         {screen === 'savings'      && <SavingsTab />}
         {screen === 'accounts'     && <AccountsTab onViewTransactions={handleAccountDrillDown} />}
         {screen === 'settings'     && <SettingsPage onBack={closeSettings} />}

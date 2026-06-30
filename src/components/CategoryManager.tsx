@@ -316,13 +316,14 @@ const G_BAR_H = 80, G_LABEL_H = 18
 const G_H     = G_BAR_H + G_LABEL_H + 4  // 102
 
 function CategorySpendGraph({
-  monthlySpend, monthlyBudget, selectedYear, currencySymbol, isLoading,
+  monthlySpend, monthlyBudget, selectedYear, currencySymbol, isLoading, onMonthClick,
 }: {
   monthlySpend: number[]
   monthlyBudget: (number | null)[]
   selectedYear: number
   currencySymbol: string
   isLoading: boolean
+  onMonthClick?: (month: number) => void
 }) {
   const [hovMonth, setHovMonth] = useState<number | null>(null)
   const now = new Date()
@@ -369,9 +370,7 @@ function CategorySpendGraph({
               {budget !== null && budget > 0 && (
                 <rect
                   x={x + G_BAR + G_INTRA} y={G_BAR_H - bh(budget)} width={G_BAR} height={bh(budget)}
-                  rx={2}
-                  fill={isFuture ? 'var(--color-text-muted)' : BUDGET_CLR}
-                  opacity={isHov ? 1 : (isFuture ? 0.35 : 0.6)}
+                  rx={2} fill={BUDGET_CLR} opacity={isHov ? 1 : 0.6}
                 />
               )}
 
@@ -379,18 +378,20 @@ function CategorySpendGraph({
               <text
                 x={x + G_BAR + G_INTRA / 2} y={G_BAR_H + G_LABEL_H - 2}
                 textAnchor="middle" fontSize={9} fontFamily="inherit"
-                fill={isHov ? 'var(--color-text)' : 'var(--color-text-muted)'}
+                fill={isHov ? 'var(--color-primary-text)' : 'var(--color-text-muted)'}
                 fontWeight={isHov ? 600 : 400}
+                style={{ cursor: onMonthClick ? 'pointer' : 'default' }}
               >
                 {mon}
               </text>
 
-              {/* Invisible hover target */}
+              {/* Invisible hover + click target (covers bars + label) */}
               <rect
-                x={x - G_INTER / 2} y={0} width={G_GROUP} height={G_BAR_H}
-                fill="transparent" style={{ cursor: 'default' }}
+                x={x - G_INTER / 2} y={0} width={G_GROUP} height={G_H}
+                fill="transparent" style={{ cursor: onMonthClick ? 'pointer' : 'default' }}
                 onMouseEnter={() => setHovMonth(m)}
                 onMouseLeave={() => setHovMonth(null)}
+                onClick={() => onMonthClick?.(m)}
               />
             </g>
           )
@@ -428,6 +429,11 @@ function CategorySpendGraph({
               </div>
             ) : (
               <div style={{ color: 'var(--color-text-muted)' }}>No budget set</div>
+            )}
+            {onMonthClick && (
+              <div style={{ color: 'var(--color-text-muted)', fontSize: '11px', marginTop: '5px', borderTop: '1px solid var(--color-border)', paddingTop: '4px' }}>
+                Click to view transactions
+              </div>
             )}
           </div>
         )
@@ -484,7 +490,7 @@ const CADENCE_LABELS: Record<string, string> = {
   quarterly: 'Quarterly', biannually: 'Biannually', annually: 'Annually',
 }
 
-export default function CategoryManager() {
+export default function CategoryManager({ onMonthDrillDown }: { onMonthDrillDown?: (categoryId: string, from: string, to: string) => void } = {}) {
   const { currencySymbol } = useSettings()
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
@@ -579,25 +585,23 @@ export default function CategoryManager() {
 
   useEffect(() => { if (showGraph) loadYearlySpend(selectedYear) }, [showGraph, selectedYear])
 
-  function monthlySpendArray(parent: Category, children: Category[]): number[] {
-    const pm = yearlySpendByCategory.get(parent.id) ?? new Array(12).fill(0)
-    return Array.from({ length: 12 }, (_, m) =>
-      pm[m] + children.reduce((s, c) => s + (yearlySpendByCategory.get(c.id)?.[m] ?? 0), 0)
-    )
+  function catMonthlySpendArray(categoryId: string): number[] {
+    return yearlySpendByCategory.get(categoryId) ?? new Array(12).fill(0)
   }
 
-  function monthlyBudgetArray(parent: Category, children: Category[]): (number | null)[] {
-    return Array.from({ length: 12 }, (_, m) => {
-      if (children.length > 0) {
-        if (!children.some(c => budgetsMap.has(c.id))) return null
-        return children.reduce((s, c) => {
-          const b = budgetsMap.get(c.id)
-          return s + (b ? (getBudgetForMonth(b, m, selectedYear) ?? 0) : 0)
-        }, 0)
-      }
-      const b = budgetsMap.get(parent.id)
-      return b ? getBudgetForMonth(b, m, selectedYear) : null
-    })
+  function catMonthlyBudgetArray(categoryId: string): (number | null)[] {
+    const b = budgetsMap.get(categoryId)
+    if (!b) return new Array(12).fill(null)
+    return Array.from({ length: 12 }, (_, m) => getBudgetForMonth(b, m, selectedYear))
+  }
+
+  function makeMonthClickHandler(categoryId: string) {
+    if (!onMonthDrillDown) return undefined
+    return (m: number) => {
+      const from = `${selectedYear}-${String(m + 1).padStart(2, '0')}-01`
+      const to   = `${selectedYear}-${String(m + 1).padStart(2, '0')}-${String(new Date(selectedYear, m + 1, 0).getDate()).padStart(2, '0')}`
+      onMonthDrillDown(categoryId, from, to)
+    }
   }
 
   async function performRollover(allBudgets: CategoryBudget[], year: number): Promise<boolean> {
@@ -779,7 +783,7 @@ export default function CategoryManager() {
             onClick={() => setShowGraph(g => !g)}
             style={{ fontFamily: 'inherit', fontSize: '13px', fontWeight: 500, padding: '3px 12px', borderRadius: '8px', cursor: 'pointer', border: '1px solid', background: showGraph ? 'var(--color-primary-text)' : 'transparent', borderColor: showGraph ? 'var(--color-primary-text)' : 'var(--color-border)', color: showGraph ? '#fff' : 'var(--color-text-muted)' }}
           >
-            Chart
+            BvA
           </button>
         </div>
         <button style={s.btn('primary')} onClick={() => setAddModalFor('__top__')}>+ Add Category</button>
@@ -843,7 +847,17 @@ export default function CategoryManager() {
                           ]} />
                         </div>
                       </div>
-                      {!isNextYear && <BudgetBar spent={subSpend} budget={subBudget} isIncome={subIsIncome} />}
+                      {!isNextYear && !showGraph && <BudgetBar spent={subSpend} budget={subBudget} isIncome={subIsIncome} />}
+                      {showGraph && (
+                        <CategorySpendGraph
+                          monthlySpend={catMonthlySpendArray(sub.id)}
+                          monthlyBudget={catMonthlyBudgetArray(sub.id)}
+                          selectedYear={selectedYear}
+                          currencySymbol={currencySymbol}
+                          isLoading={graphLoading}
+                          onMonthClick={makeMonthClickHandler(sub.id)}
+                        />
+                      )}
                       {messages[sub.id] && <div style={s.notice(messages[sub.id].type)}>{messages[sub.id].text}</div>}
                     </li>
                   )
@@ -876,17 +890,18 @@ export default function CategoryManager() {
                   </span>
                 )}
               </div>
-              {!isNextYear && <BudgetBar spent={parentSpend} budget={parentBudgetMonthly} isIncome={isIncome} />}
+              {!isNextYear && !showGraph && <BudgetBar spent={parentSpend} budget={parentBudgetMonthly} isIncome={isIncome} />}
             </div>
 
-            {/* Monthly spend vs budget chart */}
-            {showGraph && (
+            {/* For leaf categories (no children), chart sits here */}
+            {showGraph && !hasChildren && (
               <CategorySpendGraph
-                monthlySpend={monthlySpendArray(parent, children)}
-                monthlyBudget={monthlyBudgetArray(parent, children)}
+                monthlySpend={catMonthlySpendArray(parent.id)}
+                monthlyBudget={catMonthlyBudgetArray(parent.id)}
                 selectedYear={selectedYear}
                 currencySymbol={currencySymbol}
                 isLoading={graphLoading}
+                onMonthClick={makeMonthClickHandler(parent.id)}
               />
             )}
           </div>
