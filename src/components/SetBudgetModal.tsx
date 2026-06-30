@@ -24,12 +24,15 @@ export interface CategoryBudget {
 export function computeCadenceMonthlyAmounts(
   cadence: string,
   referenceDateStr: string,
-  amountPerOccurrence: number,
+  amountPerOccurrence: number | number[],
   year: number,
 ): number[] {
   const amounts = new Array(12).fill(0)
   const ref = new Date(referenceDateStr + 'T12:00:00')
   const MS = 86400000
+  let occIdx = 0
+  const getAmt = (i: number) =>
+    Array.isArray(amountPerOccurrence) ? (amountPerOccurrence[i] ?? 0) : amountPerOccurrence
 
   if (cadence === 'weekly' || cadence === 'biweekly') {
     const step = cadence === 'weekly' ? 7 : 14
@@ -40,20 +43,20 @@ export function computeCadenceMonthlyAmounts(
     let cur = refTime + stepsNeeded * step * MS
     while (cur <= yearEnd) {
       const d = new Date(cur)
-      if (d.getFullYear() === year) amounts[d.getMonth()] += amountPerOccurrence
+      if (d.getFullYear() === year) { amounts[d.getMonth()] += getAmt(occIdx); occIdx++ }
       cur += step * MS
     }
   } else if (cadence === 'monthly') {
-    for (let m = 0; m < 12; m++) amounts[m] = amountPerOccurrence
+    for (let m = 0; m < 12; m++) { amounts[m] = getAmt(occIdx); occIdx++ }
   } else if (cadence === 'quarterly') {
     const start = ref.getMonth()
-    for (let q = 0; q < 4; q++) amounts[(start + q * 3) % 12] += amountPerOccurrence
+    for (let q = 0; q < 4; q++) { amounts[(start + q * 3) % 12] += getAmt(occIdx); occIdx++ }
   } else if (cadence === 'biannually') {
     const m = ref.getMonth()
-    amounts[m] += amountPerOccurrence
-    amounts[(m + 6) % 12] += amountPerOccurrence
+    amounts[m] += getAmt(occIdx); occIdx++
+    amounts[(m + 6) % 12] += getAmt(occIdx)
   } else if (cadence === 'annually') {
-    amounts[ref.getMonth()] = amountPerOccurrence
+    amounts[ref.getMonth()] = getAmt(0)
   }
 
   return amounts
@@ -68,8 +71,10 @@ export function getBudgetForMonth(
   if (budget.mode === 'flat') return budget.monthly_amount
   if (budget.mode === 'variable') return budget.monthly_amounts?.[month] ?? null
   if (budget.mode === 'cadence') {
-    if (!budget.cadence || !budget.reference_date || budget.amount_per_occurrence === null) return null
-    return computeCadenceMonthlyAmounts(budget.cadence, budget.reference_date, budget.amount_per_occurrence, year)[month]
+    if (!budget.cadence || !budget.reference_date) return null
+    const amt = budget.monthly_amounts ?? budget.amount_per_occurrence
+    if (amt === null) return null
+    return computeCadenceMonthlyAmounts(budget.cadence, budget.reference_date, amt, year)[month]
   }
   return null
 }
@@ -79,8 +84,10 @@ export function getAnnualBudgetTotal(budget: CategoryBudget | null, year: number
   if (budget.mode === 'flat') return budget.monthly_amount !== null ? budget.monthly_amount * 12 : null
   if (budget.mode === 'variable') return budget.monthly_amounts ? budget.monthly_amounts.reduce((s, a) => s + a, 0) : null
   if (budget.mode === 'cadence') {
-    if (!budget.cadence || !budget.reference_date || budget.amount_per_occurrence === null) return null
-    return computeCadenceMonthlyAmounts(budget.cadence, budget.reference_date, budget.amount_per_occurrence, year).reduce((s, a) => s + a, 0)
+    if (!budget.cadence || !budget.reference_date) return null
+    const amt = budget.monthly_amounts ?? budget.amount_per_occurrence
+    if (amt === null) return null
+    return computeCadenceMonthlyAmounts(budget.cadence, budget.reference_date, amt, year).reduce((s, a) => s + a, 0)
   }
   return null
 }
@@ -97,6 +104,13 @@ const CADENCES = [
   { value: 'biannually',label: 'Biannually' },
   { value: 'annually',  label: 'Annually'   },
 ]
+
+// Cadences that support per-occurrence variable amounts (weekly/biweekly excluded — too many occurrences)
+const VARIABLE_OCC_CADENCES = ['monthly', 'quarterly', 'biannually', 'annually']
+
+function occCountForCadence(c: string): number {
+  return ({ monthly: 12, quarterly: 4, biannually: 2, annually: 1 } as Record<string, number>)[c] ?? 4
+}
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
@@ -170,6 +184,13 @@ export default function SetBudgetModal({ category, existingBudget, year, onSave,
   const [linkedRecId, setLinkedRecId] = useState<string | null>(eb?.linked_recurring_id ?? null)
   const [recurringEntries, setRecurringEntries] = useState<{ id: string; vendor: string; cadence: string }[]>([])
   const [linkLoading, setLinkLoading] = useState(false)
+  // Variable occurrence amounts (cadence mode only — stored in monthly_amounts)
+  const [varOccurrences, setVarOccurrences] = useState(eb?.mode === 'cadence' && eb.monthly_amounts !== null)
+  const [occAmts, setOccAmts] = useState<string[]>(() => {
+    if (eb?.mode === 'cadence' && eb.monthly_amounts) return eb.monthly_amounts.map(v => v > 0 ? String(v) : '')
+    return new Array(occCountForCadence(eb?.cadence ?? 'quarterly')).fill('')
+  })
+  const [fillCadenceLoading, setFillCadenceLoading] = useState(false)
 
   // ── UI state ──────────────────────────────────────────────────────────────
   const [saving, setSaving] = useState(false)
@@ -185,11 +206,34 @@ export default function SetBudgetModal({ category, existingBudget, year, onSave,
   }, [category.id])
 
   // ── Cadence preview ───────────────────────────────────────────────────────
+  const occurrenceLabels = useMemo(() => {
+    if (!refDate || !VARIABLE_OCC_CADENCES.includes(cadence)) return []
+    const preview = computeCadenceMonthlyAmounts(cadence, refDate, 1, year)
+    return MONTHS.filter((_, m) => preview[m] > 0)
+  }, [cadence, refDate, year])
+
+  // Resize occAmts when cadence changes
+  useEffect(() => {
+    const n = occCountForCadence(cadence)
+    setOccAmts(prev => {
+      if (prev.length === n) return prev
+      const next = new Array(n).fill('')
+      for (let i = 0; i < Math.min(prev.length, n); i++) next[i] = prev[i]
+      return next
+    })
+  }, [cadence])
+
   const cadencePreview = useMemo(() => {
+    if (!refDate || !cadence) return null
+    if (varOccurrences) {
+      const amts = occAmts.map(v => parseFloat(v) || 0)
+      if (!amts.some(a => a > 0)) return null
+      return computeCadenceMonthlyAmounts(cadence, refDate, amts, year)
+    }
     const amt = parseFloat(occAmt)
-    if (!refDate || !cadence || isNaN(amt) || amt <= 0) return null
+    if (isNaN(amt) || amt <= 0) return null
     return computeCadenceMonthlyAmounts(cadence, refDate, amt, year)
-  }, [cadence, refDate, occAmt, year])
+  }, [cadence, refDate, occAmt, occAmts, varOccurrences, year])
 
   const cadenceAnnual = cadencePreview ? cadencePreview.reduce((s, a) => s + a, 0) : null
 
@@ -224,6 +268,31 @@ export default function SetBudgetModal({ category, existingBudget, year, onSave,
 
     setMonthAmts(totals.map(v => v > 0 ? v.toFixed(2) : ''))
     setFillLoading(false)
+  }
+
+  // ── Fill cadence occurrences from prior year actuals ─────────────────────
+  async function fillCadenceFromActuals() {
+    if (!refDate) return
+    setFillCadenceLoading(true)
+    const priorYear = year - 1
+    const { data } = await supabase.from('transactions')
+      .select('date, amount')
+      .eq('category_id', category.id)
+      .gte('date', `${priorYear}-01-01`)
+      .lte('date', `${priorYear}-12-31`)
+
+    const monthTotals = new Array(12).fill(0)
+    for (const t of data ?? []) monthTotals[new Date(t.date + 'T12:00:00').getMonth()] += t.amount
+
+    // Map prior year occurrence months to occurrence amounts
+    const priorPreview = computeCadenceMonthlyAmounts(cadence, refDate, 1, priorYear)
+    const filled: string[] = []
+    for (let m = 0; m < 12; m++) {
+      if (priorPreview[m] > 0) filled.push(monthTotals[m] > 0 ? monthTotals[m].toFixed(2) : '')
+    }
+
+    setOccAmts(filled.length > 0 ? filled : occAmts)
+    setFillCadenceLoading(false)
   }
 
   // ── Link to recurring entry ───────────────────────────────────────────────
@@ -294,14 +363,20 @@ export default function SetBudgetModal({ category, existingBudget, year, onSave,
     } else {
       if (!cadence || !refDate) { setError('Please enter a cadence and reference date.'); return }
       const n = parseFloat(occAmt)
-      if (isNaN(n) || n <= 0) { setError('Please enter a valid amount per occurrence.'); return }
+      if (!varOccurrences && (isNaN(n) || n <= 0)) { setError('Please enter a valid amount per occurrence.'); return }
+      if (varOccurrences && !occAmts.some(v => parseFloat(v) > 0)) { setError('Please enter at least one occurrence amount.'); return }
       record.cadence = cadence
       record.reference_date = refDate
-      record.amount_per_occurrence = n
       record.linked_recurring_id = linkedRecId
       record.monthly_amount = null
-      record.monthly_amounts = null
       record.variable_rollover_source = null
+      if (varOccurrences) {
+        record.monthly_amounts = occAmts.map(v => parseFloat(v) || 0)
+        record.amount_per_occurrence = null
+      } else {
+        record.amount_per_occurrence = n
+        record.monthly_amounts = null
+      }
     }
 
     setSaving(true)
@@ -474,12 +549,57 @@ export default function SetBudgetModal({ category, existingBudget, year, onSave,
             <label style={lbl}>Reference Date <span style={{ fontWeight: 400 }}>(most recent transaction date)</span></label>
             <input style={inp} type="date" value={refDate} onChange={e => setRefDate(e.target.value)} />
 
-            <label style={lbl}>Amount per Occurrence</label>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ fontSize: '14px', color: 'var(--color-text-muted)' }}>{currencySymbol}</span>
-              <input style={{ ...inp, width: '140px' }} type="number" min="0" step="1"
-                value={occAmt} onChange={e => setOccAmt(e.target.value)} placeholder="0" />
-            </div>
+            {/* Amount section — fixed or per-occurrence variable */}
+            {VARIABLE_OCC_CADENCES.includes(cadence) && (
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '14px', cursor: 'pointer', fontSize: '13px', color: 'var(--color-text)' }}>
+                <input type="checkbox" checked={varOccurrences} onChange={e => setVarOccurrences(e.target.checked)} style={{ accentColor: 'var(--color-primary)', width: '15px', height: '15px' }} />
+                Variable occurrence amounts <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>(each {cadence === 'quarterly' ? 'quarter' : cadence === 'biannually' ? 'billing' : 'period'} differs)</span>
+              </label>
+            )}
+
+            {!varOccurrences && (
+              <>
+                <label style={lbl}>Amount per Occurrence</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '14px', color: 'var(--color-text-muted)' }}>{currencySymbol}</span>
+                  <input style={{ ...inp, width: '140px' }} type="number" min="0" step="1"
+                    value={occAmt} onChange={e => setOccAmt(e.target.value)} placeholder="0" />
+                </div>
+              </>
+            )}
+
+            {varOccurrences && (
+              <div style={{ marginTop: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--color-text-muted)' }}>Amount per occurrence</span>
+                  <button
+                    onClick={fillCadenceFromActuals}
+                    disabled={fillCadenceLoading || !refDate}
+                    style={{ ...btn(false), fontSize: '12px', padding: '3px 10px' }}
+                    title={!refDate ? 'Set a reference date first' : ''}
+                  >
+                    {fillCadenceLoading ? 'Loading…' : 'Fill from prior year actuals'}
+                  </button>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(occAmts.length, 4)}, 1fr)`, gap: '10px' }}>
+                  {occAmts.map((v, i) => (
+                    <div key={i}>
+                      <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text-muted)', marginBottom: '3px' }}>
+                        {occurrenceLabels[i] ?? `#${i + 1}`}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+                        <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>{currencySymbol}</span>
+                        <input
+                          type="number" min="0" step="1" value={v} placeholder="0"
+                          onChange={e => setOccAmts(prev => { const n = [...prev]; n[i] = e.target.value; return n })}
+                          style={{ ...inp, padding: '5px 6px', fontSize: '13px' }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Monthly preview */}
             {cadencePreview && (
