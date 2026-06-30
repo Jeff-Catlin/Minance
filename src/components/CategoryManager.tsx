@@ -1,8 +1,10 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Category } from '../types'
 import { useSettings } from '../context/SettingsContext'
 import ProgressBar from './ProgressBar'
+import SetBudgetModal, { getBudgetForMonth, getAnnualBudgetTotal } from './SetBudgetModal'
+import type { CategoryBudget } from './SetBudgetModal'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -304,62 +306,6 @@ function RenameModal({ current, onSave, onClose }: { current: string; onSave: (n
   )
 }
 
-// ── Budget input ──────────────────────────────────────────────────────────────
-
-function BudgetInput({ category, onSave }: { category: Category; onSave: (id: string, val: number | null) => Promise<void> }) {
-  const { currencySymbol } = useSettings()
-  const [editing, setEditing] = useState(false)
-  const [value, setValue] = useState(category.monthly_budget !== null ? String(category.monthly_budget) : '')
-
-  useEffect(() => {
-    if (!editing) setValue(category.monthly_budget !== null ? String(category.monthly_budget) : '')
-  }, [category.monthly_budget, editing])
-
-  async function commit() {
-    setEditing(false)
-    const trimmed = value.trim()
-    const num = trimmed === '' ? null : parseFloat(trimmed)
-    if (num !== null && (isNaN(num) || num < 0)) {
-      setValue(category.monthly_budget !== null ? String(category.monthly_budget) : '')
-      return
-    }
-    if (num === category.monthly_budget) return
-    await onSave(category.id, num)
-  }
-
-  if (editing) {
-    return (
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', fontSize: '12px', color: 'var(--color-text-muted)' }}>
-        $
-        <input
-          autoFocus
-          type="number"
-          min="0"
-          step="1"
-          value={value}
-          onChange={e => setValue(e.target.value)}
-          onBlur={commit}
-          onKeyDown={e => {
-            if (e.key === 'Enter') e.currentTarget.blur()
-            if (e.key === 'Escape') { setValue(category.monthly_budget !== null ? String(category.monthly_budget) : ''); setEditing(false) }
-          }}
-          style={{ width: '76px', fontSize: '12px', border: '1px solid var(--color-primary)', borderRadius: '4px', padding: '2px 5px', background: 'var(--color-bg)', color: 'var(--color-text)', outline: 'none', fontFamily: 'inherit' }}
-        />
-        /mo
-      </span>
-    )
-  }
-
-  return (
-    <button
-      onClick={() => setEditing(true)}
-      style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '12px', fontFamily: 'inherit', padding: 0, color: category.monthly_budget !== null ? 'var(--color-primary-text)' : 'var(--color-text-muted)' }}
-    >
-      {category.monthly_budget !== null ? `${currencySymbol}${formatAmount(category.monthly_budget)}/mo` : '+ Set budget'}
-    </button>
-  )
-}
-
 // ── Budget bar ────────────────────────────────────────────────────────────────
 
 function BudgetBar({ spent, budget, isIncome }: { spent: number; budget: number | null; isIncome: boolean }) {
@@ -391,6 +337,11 @@ function BudgetBar({ spent, budget, isIncome }: { spent: number; budget: number 
 
 // ── Main component ────────────────────────────────────────────────────────────
 
+const CADENCE_LABELS: Record<string, string> = {
+  weekly: 'Weekly', biweekly: 'Biweekly', monthly: 'Monthly',
+  quarterly: 'Quarterly', biannually: 'Biannually', annually: 'Annually',
+}
+
 export default function CategoryManager() {
   const { currencySymbol } = useSettings()
   const [categories, setCategories] = useState<Category[]>([])
@@ -401,6 +352,75 @@ export default function CategoryManager() {
   const [renamingCat, setRenamingCat] = useState<Category | null>(null)
   const [messages, setMessages] = useState<Record<string, { text: string; type: 'error' | 'info' }>>({})
 
+  const currentYear  = new Date().getFullYear()
+  const currentMonth = new Date().getMonth()
+
+  const [selectedYear, setSelectedYear]     = useState(currentYear)
+  const [budgets, setBudgets]               = useState<CategoryBudget[]>([])
+  const [budgetingCategory, setBudgetingCategory] = useState<Category | null>(null)
+  const didRolloverRef = useRef(false)
+
+  const budgetsMap = useMemo(() => {
+    const m = new Map<string, CategoryBudget>()
+    for (const b of budgets) {
+      if (b.year === selectedYear) m.set(b.category_id, b)
+    }
+    return m
+  }, [budgets, selectedYear])
+
+  const isNextYear = selectedYear > currentYear
+
+  function catBudgetMonthly(categoryId: string): number | null {
+    const b = budgetsMap.get(categoryId)
+    if (!b) return null
+    return getBudgetForMonth(b, currentMonth, selectedYear)
+  }
+
+  function budgetSummaryStr(categoryId: string): string | null {
+    const b = budgetsMap.get(categoryId)
+    if (!b) return null
+    if (b.mode === 'flat') return b.monthly_amount !== null ? `${currencySymbol}${formatAmount(b.monthly_amount)}/mo` : null
+    if (b.mode === 'variable') {
+      const annual = getAnnualBudgetTotal(b, selectedYear)
+      return annual !== null ? `Variable · ${currencySymbol}${Math.round(annual).toLocaleString()}/yr` : 'Variable'
+    }
+    if (b.mode === 'cadence') {
+      const lbl = CADENCE_LABELS[b.cadence ?? ''] ?? b.cadence ?? 'Cadence'
+      const annual = getAnnualBudgetTotal(b, selectedYear)
+      return annual !== null ? `${lbl} · ${currencySymbol}${Math.round(annual).toLocaleString()}/yr` : lbl
+    }
+    return null
+  }
+
+  async function performRollover(allBudgets: CategoryBudget[], year: number): Promise<boolean> {
+    const priorBudgets = allBudgets.filter(b => b.year === year - 1)
+    const currentIds   = new Set(allBudgets.filter(b => b.year === year).map(b => b.category_id))
+    const toRollover   = priorBudgets.filter(b => !currentIds.has(b.category_id))
+    if (toRollover.length === 0) return false
+
+    const newBudgets = await Promise.all(toRollover.map(async b => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const base: Record<string, any> = { category_id: b.category_id, year, mode: b.mode }
+      if (b.mode === 'flat') return { ...base, monthly_amount: b.monthly_amount }
+      if (b.mode === 'variable') {
+        if (b.variable_rollover_source === 'actuals') {
+          const { data } = await supabase.from('transactions').select('date, amount')
+            .eq('category_id', b.category_id)
+            .gte('date', `${year - 1}-01-01`)
+            .lte('date', `${year - 1}-12-31`)
+          const totals = new Array(12).fill(0)
+          for (const t of data ?? []) totals[new Date(t.date + 'T12:00:00').getMonth()] += t.amount
+          return { ...base, monthly_amounts: totals, variable_rollover_source: b.variable_rollover_source }
+        }
+        return { ...base, monthly_amounts: b.monthly_amounts, variable_rollover_source: b.variable_rollover_source }
+      }
+      return { ...base, cadence: b.cadence, reference_date: b.reference_date, amount_per_occurrence: b.amount_per_occurrence }
+    }))
+
+    const { error } = await supabase.from('category_budgets').insert(newBudgets)
+    return !error
+  }
+
   async function load() {
     const now = new Date()
     const y = now.getFullYear()
@@ -408,9 +428,10 @@ export default function CategoryManager() {
     const from = `${y}-${String(m + 1).padStart(2, '0')}-01`
     const to = `${y}-${String(m + 1).padStart(2, '0')}-${String(new Date(y, m + 1, 0).getDate()).padStart(2, '0')}`
 
-    const [{ data: cats }, { data: txns }] = await Promise.all([
+    const [{ data: cats }, { data: txns }, { data: budgetData }] = await Promise.all([
       supabase.from('categories').select('*').eq('is_archived', false).order('name', { ascending: true }),
       supabase.from('transactions').select('*').gte('date', from).lte('date', to),
+      supabase.from('category_budgets').select('*').in('year', [y - 1, y, y + 1]),
     ])
 
     setCategories(cats ?? [])
@@ -443,6 +464,21 @@ export default function CategoryManager() {
 
     setSpendMap(sMap)
     setTypeMap(tMap)
+
+    const allBudgets = (budgetData ?? []) as CategoryBudget[]
+    if (!didRolloverRef.current) {
+      didRolloverRef.current = true
+      const rolled = await performRollover(allBudgets, y)
+      if (rolled) {
+        const { data: refreshed } = await supabase.from('category_budgets').select('*').in('year', [y - 1, y, y + 1])
+        setBudgets((refreshed ?? []) as CategoryBudget[])
+      } else {
+        setBudgets(allBudgets)
+      }
+    } else {
+      setBudgets(allBudgets)
+    }
+
     setLoading(false)
   }
 
@@ -451,13 +487,6 @@ export default function CategoryManager() {
   function setMessage(id: string, text: string, type: 'error' | 'info') {
     setMessages(m => ({ ...m, [id]: { text, type } }))
     setTimeout(() => setMessages(m => { const n = { ...m }; delete n[id]; return n }), 4000)
-  }
-
-  // ── Budget ────────────────────────────────────────────────────────────────
-
-  async function handleSetBudget(id: string, value: number | null) {
-    await supabase.from('categories').update({ monthly_budget: value }).eq('id', id)
-    setCategories(prev => prev.map(c => c.id === id ? { ...c, monthly_budget: value } : c))
   }
 
   // ── Create ────────────────────────────────────────────────────────────────
@@ -529,7 +558,16 @@ export default function CategoryManager() {
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
-        <h2 style={s.heading}>Categories</h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <h2 style={s.heading}>Categories</h2>
+          <div style={{ display: 'flex', gap: '2px', background: 'var(--color-bg)', borderRadius: '8px', padding: '2px', border: '1px solid var(--color-border)' }}>
+            {[currentYear, currentYear + 1].map(yr => (
+              <button key={yr} onClick={() => setSelectedYear(yr)} style={{ fontFamily: 'inherit', fontSize: '13px', fontWeight: selectedYear === yr ? 600 : 400, padding: '3px 10px', borderRadius: '6px', cursor: 'pointer', border: 'none', background: selectedYear === yr ? 'var(--color-surface)' : 'transparent', color: selectedYear === yr ? 'var(--color-text)' : 'var(--color-text-muted)', boxShadow: selectedYear === yr ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>
+                {yr}
+              </button>
+            ))}
+          </div>
+        </div>
         <button style={s.btn('primary')} onClick={() => setAddModalFor('__top__')}>+ Add Category</button>
       </div>
 
@@ -541,12 +579,13 @@ export default function CategoryManager() {
         const children = subcategories.filter(c => c.parent_id === parent.id)
         const hasChildren = children.length > 0
 
-        // Rolled-up spend and budget for this parent
         const parentSpend = (spendMap.get(parent.id) ?? 0) + children.reduce((s, c) => s + (spendMap.get(c.id) ?? 0), 0)
-        const parentBudget = hasChildren
-          ? (children.some(c => c.monthly_budget !== null) ? children.reduce((s, c) => s + (c.monthly_budget ?? 0), 0) : null)
-          : parent.monthly_budget
         const isIncome = typeMap.get(parent.id) === 'income' || children.some(c => typeMap.get(c.id) === 'income')
+
+        const childrenWithBudget = children.filter(c => budgetsMap.has(c.id))
+        const parentBudgetMonthly = hasChildren
+          ? (childrenWithBudget.length > 0 ? children.reduce((s, c) => s + (catBudgetMonthly(c.id) ?? 0), 0) : null)
+          : catBudgetMonthly(parent.id)
 
         return (
           <div key={parent.id} style={s.card}>
@@ -571,12 +610,18 @@ export default function CategoryManager() {
                 {children.map(sub => {
                   const subSpend = spendMap.get(sub.id) ?? 0
                   const subIsIncome = typeMap.get(sub.id) === 'income' || isIncome
+                  const subBudget = catBudgetMonthly(sub.id)
                   return (
                     <li key={sub.id} style={s.subItem}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <span style={s.subName}>{sub.name}</span>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <BudgetInput category={sub} onSave={handleSetBudget} />
+                          <button
+                            onClick={() => setBudgetingCategory(sub)}
+                            style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '12px', fontFamily: 'inherit', padding: 0, color: budgetsMap.has(sub.id) ? 'var(--color-primary-text)' : 'var(--color-text-muted)' }}
+                          >
+                            {budgetSummaryStr(sub.id) ?? `+ Set ${selectedYear} budget`}
+                          </button>
                           <DotsMenu items={[
                             { label: 'Rename', onClick: () => setRenamingCat(sub) },
                             { label: 'Archive', onClick: () => handleArchive(sub) },
@@ -584,7 +629,7 @@ export default function CategoryManager() {
                           ]} />
                         </div>
                       </div>
-                      <BudgetBar spent={subSpend} budget={sub.monthly_budget} isIncome={subIsIncome} />
+                      {!isNextYear && <BudgetBar spent={subSpend} budget={subBudget} isIncome={subIsIncome} />}
                       {messages[sub.id] && <div style={s.notice(messages[sub.id].type)}>{messages[sub.id].text}</div>}
                     </li>
                   )
@@ -592,20 +637,32 @@ export default function CategoryManager() {
               </ul>
             )}
 
-            {/* Budget section — editable on parent if no children, rolled-up if has children */}
+            {/* Budget section */}
             <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: '1px solid var(--color-border)' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2px' }}>
                 <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  {hasChildren ? 'Total This Month' : 'Monthly Budget'}
+                  {isNextYear ? `${selectedYear} Budget` : (hasChildren ? 'Total This Month' : 'Monthly Budget')}
                 </span>
-                {!hasChildren && <BudgetInput category={parent} onSave={handleSetBudget} />}
-                {hasChildren && parentBudget !== null && (
+                {!hasChildren && (
+                  <button
+                    onClick={() => setBudgetingCategory(parent)}
+                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '12px', fontFamily: 'inherit', padding: 0, color: budgetsMap.has(parent.id) ? 'var(--color-primary-text)' : 'var(--color-text-muted)' }}
+                  >
+                    {budgetSummaryStr(parent.id) ?? `+ Set ${selectedYear} budget`}
+                  </button>
+                )}
+                {hasChildren && parentBudgetMonthly !== null && !isNextYear && (
                   <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
-                    {currencySymbol}{formatAmount(parentBudget)}/mo combined
+                    {currencySymbol}{formatAmount(parentBudgetMonthly)}/mo combined
+                  </span>
+                )}
+                {hasChildren && isNextYear && (
+                  <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
+                    Set budgets on subcategories above
                   </span>
                 )}
               </div>
-              <BudgetBar spent={parentSpend} budget={parentBudget} isIncome={isIncome} />
+              {!isNextYear && <BudgetBar spent={parentSpend} budget={parentBudgetMonthly} isIncome={isIncome} />}
             </div>
           </div>
         )
@@ -624,6 +681,16 @@ export default function CategoryManager() {
           current={renamingCat.name}
           onSave={handleRename}
           onClose={() => setRenamingCat(null)}
+        />
+      )}
+
+      {budgetingCategory && (
+        <SetBudgetModal
+          category={budgetingCategory}
+          existingBudget={budgetsMap.get(budgetingCategory.id) ?? null}
+          year={selectedYear}
+          onSave={() => { setBudgetingCategory(null); load() }}
+          onClose={() => setBudgetingCategory(null)}
         />
       )}
     </div>
