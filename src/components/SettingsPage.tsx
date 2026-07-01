@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useSettings, CURRENCY_SYMBOLS, EXPENSE_BAR_DEFAULTS, SAVINGS_BAR_DEFAULTS } from '../context/SettingsContext'
 import type { Currency, AppSettings, TaxFilingStatus, AttainmentDisplay, ColorStop } from '../context/SettingsContext'
 import { supabase } from '../lib/supabase'
@@ -222,17 +222,28 @@ function ColorPicker({ value, onChange }: { value: string; onChange: (v: string)
 }
 
 function ThresholdInput({ value, style, onChange }: { value: number; style: React.CSSProperties; onChange: (n: number) => void }) {
-  const [local, setLocal] = useState(String(value))
-  useEffect(() => { setLocal(String(value)) }, [value])
+  const ref = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (ref.current && document.activeElement !== ref.current) {
+      ref.current.value = String(value)
+    }
+  }, [value])
+
   return (
     <input
+      ref={ref}
       type="text"
       inputMode="numeric"
-      value={local}
-      onChange={e => setLocal(e.target.value.replace(/[^0-9]/g, ''))}
-      onBlur={() => {
-        const n = Math.max(0, parseInt(local, 10) || 0)
-        setLocal(String(n))
+      defaultValue={String(value)}
+      onKeyDown={e => {
+        if (!/^[0-9]$/.test(e.key) && !['Backspace', 'Delete', 'Tab', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) {
+          e.preventDefault()
+        }
+      }}
+      onBlur={e => {
+        const n = Math.max(0, parseInt(e.target.value, 10) || 0)
+        e.target.value = String(n)
         onChange(n)
       }}
       style={style}
