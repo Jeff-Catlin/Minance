@@ -1050,8 +1050,8 @@ export default function CategoryManager({ onMonthDrillDown }: { onMonthDrillDown
           </button>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <button style={s.btn('ghost')} onClick={() => { setShowArchivedCats(true); loadArchivedCats() }}>Archived Categories</button>
           <button style={s.btn('ghost')} onClick={openArchivedBudgets}>Archived Budgets</button>
+          <button style={s.btn('ghost')} onClick={() => { setShowArchivedCats(true); loadArchivedCats() }}>Archived Categories</button>
           <button style={s.btn('primary')} onClick={() => setAddModalFor('__top__')}>+ Add Category</button>
         </div>
       </div>
