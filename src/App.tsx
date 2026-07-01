@@ -42,8 +42,8 @@ export default function App() {
     setTimeout(() => { setTxFilter(null); setTxInitialSubTab(null) }, 100)
   }
 
-  function handleCategoryMonthDrillDown(categoryId: string, from: string, to: string) {
-    setTxFilter({ categoryId, from, to })
+  function handleCategoryMonthDrillDown(categoryId: string | null, from: string, to: string) {
+    setTxFilter({ ...(categoryId ? { categoryId } : {}), from, to })
     setTxInitialSubTab('all')
     setTxFilterKey(k => k + 1)
     setScreen('transactions')

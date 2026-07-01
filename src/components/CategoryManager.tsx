@@ -506,7 +506,7 @@ const CADENCE_LABELS: Record<string, string> = {
   quarterly: 'Quarterly', biannually: 'Biannually', annually: 'Annually',
 }
 
-export default function CategoryManager({ onMonthDrillDown }: { onMonthDrillDown?: (categoryId: string, from: string, to: string) => void } = {}) {
+export default function CategoryManager({ onMonthDrillDown }: { onMonthDrillDown?: (categoryId: string | null, from: string, to: string) => void } = {}) {
   const { currencySymbol } = useSettings()
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
@@ -808,6 +808,44 @@ export default function CategoryManager({ onMonthDrillDown }: { onMonthDrillDown
       {parents.length === 0 && (
         <p style={{ color: 'var(--color-text-muted)' }}>Nothing here yet — add your first category above.</p>
       )}
+
+      {showGraph && parents.length > 0 && (() => {
+        const allIds = [...parents.map(p => p.id), ...subcategories.map(s => s.id)]
+        const totalSpend = Array.from({ length: 12 }, (_, m) => {
+          let sum = 0
+          for (const id of allIds) sum += (yearlySpendByCategory.get(id)?.[m] ?? 0)
+          return sum
+        })
+        const totalBudget = Array.from({ length: 12 }, (_, m) => {
+          let sum = 0; let hasAny = false
+          for (const [, b] of budgetsMap) {
+            const amt = getBudgetForMonth(b, m, selectedYear)
+            if (amt !== null) { sum += amt; hasAny = true }
+          }
+          return hasAny ? sum : null
+        })
+        const totalMonthClick = onMonthDrillDown ? (m: number) => {
+          const from = `${selectedYear}-${String(m + 1).padStart(2, '0')}-01`
+          const to   = `${selectedYear}-${String(m + 1).padStart(2, '0')}-${String(new Date(selectedYear, m + 1, 0).getDate()).padStart(2, '0')}`
+          onMonthDrillDown(null, from, to)
+        } : undefined
+        return (
+          <div style={{ ...s.card, marginBottom: '20px' }}>
+            <div style={s.cardHeader}>
+              <p style={s.parentName}>All Categories</p>
+              <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>{selectedYear} totals</span>
+            </div>
+            <CategorySpendGraph
+              monthlySpend={totalSpend}
+              monthlyBudget={totalBudget}
+              selectedYear={selectedYear}
+              currencySymbol={currencySymbol}
+              isLoading={graphLoading}
+              onMonthClick={totalMonthClick}
+            />
+          </div>
+        )
+      })()}
 
       {parents.map(parent => {
         const children = subcategories.filter(c => c.parent_id === parent.id)
