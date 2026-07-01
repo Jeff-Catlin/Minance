@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 import type { Transaction } from '../types'
 import { useSettings } from '../context/SettingsContext'
 
-type Cadence = 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'biannually' | 'annually'
+type Cadence = 'weekly' | 'biweekly' | 'semi-monthly' | 'monthly' | 'quarterly' | 'biannually' | 'annually'
 
 interface RecurringEntry {
   id: string
@@ -77,6 +77,10 @@ function occurrenceDaysInMonth(
       while (d < new Date(year, month, 1)) d = new Date(d.getTime() + 14 * 86_400_000)
       while (d <= end) { days.push(d.getDate()); d = new Date(d.getTime() + 14 * 86_400_000) }
     }
+
+  } else if (entry.cadence === 'semi-monthly') {
+    const mid = Math.floor(cap / 2)
+    days.push(mid, cap)
 
   } else if (entry.cadence === 'quarterly') {
     let months: number[] = []

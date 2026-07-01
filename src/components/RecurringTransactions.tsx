@@ -7,7 +7,7 @@ import EditTransactionModal from './EditTransactionModal'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type Cadence = 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'biannually' | 'annually'
+type Cadence = 'weekly' | 'biweekly' | 'semi-monthly' | 'monthly' | 'quarterly' | 'biannually' | 'annually'
 type GraphMode = 'historical' | 'forecast'
 type GraphFilter = Set<Cadence>
 type GraphRange = 1 | 3 | 6 | 12 | 'ytd'
@@ -36,6 +36,7 @@ interface Suggestion {
 const CADENCE_LABELS: Record<Cadence, string> = {
   weekly: 'Weekly',
   biweekly: 'Biweekly',
+  'semi-monthly': 'Semi-monthly',
   monthly: 'Monthly',
   quarterly: 'Quarterly',
   biannually: 'Biannually',
@@ -43,8 +44,9 @@ const CADENCE_LABELS: Record<Cadence, string> = {
 }
 
 const CADENCE_MONTHS: Record<Cadence, number> = {
-  weekly: 0,    // day-based — handled separately in forecast
-  biweekly: 0,  // day-based — handled separately in forecast
+  weekly: 0,           // day-based — handled separately in forecast
+  biweekly: 0,         // day-based — handled separately in forecast
+  'semi-monthly': 0,   // twice per month — handled separately in forecast
   monthly: 1,
   quarterly: 3,
   biannually: 6,
@@ -54,6 +56,7 @@ const CADENCE_MONTHS: Record<Cadence, number> = {
 const CADENCE_TARGET_DAYS: Record<Cadence, number> = {
   weekly: 7,
   biweekly: 14,
+  'semi-monthly': 15,
   monthly: 30,
   quarterly: 91,
   biannually: 182,
@@ -63,6 +66,7 @@ const CADENCE_TARGET_DAYS: Record<Cadence, number> = {
 const CADENCE_TOLERANCE: Record<Cadence, number> = {
   weekly: 1,
   biweekly: 2,
+  'semi-monthly': 1,
   monthly: 5,
   quarterly: 10,
   biannually: 15,
@@ -72,6 +76,7 @@ const CADENCE_TOLERANCE: Record<Cadence, number> = {
 const CADENCE_COLORS: Record<Cadence, string> = {
   weekly: '#10B981',
   biweekly: '#06B6D4',
+  'semi-monthly': '#3B82F6',
   monthly: '#0E9F8E',
   quarterly: '#8B5CF6',
   biannually: '#F59E0B',
@@ -79,7 +84,7 @@ const CADENCE_COLORS: Record<Cadence, string> = {
 }
 
 const CADENCE_ORDER: Record<Cadence, number> = {
-  weekly: 0, biweekly: 1, monthly: 2, quarterly: 3, biannually: 4, annually: 5,
+  weekly: 0, biweekly: 1, 'semi-monthly': 2, monthly: 3, quarterly: 4, biannually: 5, annually: 6,
 }
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
@@ -133,6 +138,7 @@ function formatExpectedDate(cadence: Cadence, day: number | null, month: number 
     if (day !== null && day >= 1 && day <= 7) return `Expected on ${DAY_NAMES[day - 1]}s`
     return dayOfWeek ? `Expected on ${dayOfWeek}` : null
   }
+  if (cadence === 'semi-monthly') return 'Expected on the 15th & last day of each month'
   if (!day) return null
   if (cadence === 'monthly') return `Expected around the ${ordinal(day)}`
   if (cadence === 'quarterly' || cadence === 'biannually') {
@@ -303,6 +309,8 @@ function buildForecastData(
         const intervalDays = r.cadence === 'weekly' ? 7 : 14
         const daysInMonth = new Date(year, month + 1, 0).getDate()
         occurrences = Math.round(daysInMonth / intervalDays)
+      } else if (r.cadence === 'semi-monthly') {
+        occurrences = 2
       } else {
         const intervalMonths = CADENCE_MONTHS[r.cadence]
         let proj = new Date(lastDate)
@@ -743,20 +751,29 @@ function AddRecurringModal({ categoryOptions, transactions, onSave, onClose }: A
         <select style={s.select} value={cadence} onChange={e => handleCadenceChange(e.target.value)}>
           <option value="weekly">Weekly</option>
           <option value="biweekly">Biweekly</option>
+          <option value="semi-monthly">Semi-monthly (15th & last day)</option>
           <option value="monthly">Monthly</option>
           <option value="quarterly">Quarterly</option>
           <option value="biannually">Biannually</option>
           <option value="annually">Annually</option>
         </select>
 
-        <label style={{ ...s.modalLabel }}>{isWeekly ? 'Expected day of week' : 'Expected day of month'}</label>
-        <select style={s.select} value={expectedDay} onChange={e => setExpectedDay(e.target.value)}>
-          <option value="">Not set</option>
-          {isWeekly
-            ? DAY_NAMES.map((d, i) => <option key={i + 1} value={i + 1}>{d}</option>)
-            : Array.from({ length: 31 }, (_, i) => i + 1).map(d => <option key={d} value={d}>{ordinal(d)}</option>)
-          }
-        </select>
+        {cadence === 'semi-monthly' ? (
+          <p style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '12px', padding: '8px 12px', background: 'var(--color-bg)', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
+            Occurrences are automatically computed as the 15th and last day of each month (14th & last for February).
+          </p>
+        ) : (
+          <>
+            <label style={{ ...s.modalLabel }}>{isWeekly ? 'Expected day of week' : 'Expected day of month'}</label>
+            <select style={s.select} value={expectedDay} onChange={e => setExpectedDay(e.target.value)}>
+              <option value="">Not set</option>
+              {isWeekly
+                ? DAY_NAMES.map((d, i) => <option key={i + 1} value={i + 1}>{d}</option>)
+                : Array.from({ length: 31 }, (_, i) => i + 1).map(d => <option key={d} value={d}>{ordinal(d)}</option>)
+              }
+            </select>
+          </>
+        )}
 
         {isSingleMonth && (
           <>
@@ -810,6 +827,173 @@ function AddRecurringModal({ categoryOptions, transactions, onSave, onClose }: A
   )
 }
 
+// ── Edit modal ────────────────────────────────────────────────────────────────
+
+interface EditModalProps {
+  entry: RecurringEntry
+  categoryOptions: { id: string; label: string; indent: boolean }[]
+  onSave: (fields: {
+    vendor: string
+    category_id: string | null
+    cadence: Cadence
+    expected_day: number | null
+    expected_month: number | null
+    expected_months: number[] | null
+  }) => Promise<string | null>
+  onClose: () => void
+}
+
+function EditRecurringModal({ entry, categoryOptions, onSave, onClose }: EditModalProps) {
+  const [vendor, setVendor] = useState(entry.vendor)
+  const [categoryId, setCategoryId] = useState(entry.category_id ?? '')
+  const [cadence, setCadence] = useState<Cadence>(entry.cadence)
+  const [expectedDay, setExpectedDay] = useState(entry.expected_day ? String(entry.expected_day) : '')
+  const [expectedMonth, setExpectedMonth] = useState(entry.expected_month ? String(entry.expected_month) : '')
+  const [expectedMonths, setExpectedMonths] = useState<Set<number>>(() => {
+    if (!entry.expected_months) return new Set()
+    try { return new Set(JSON.parse(entry.expected_months) as number[]) } catch { return new Set() }
+  })
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  function handleCadenceChange(newCadence: string) {
+    setCadence(newCadence as Cadence)
+    setExpectedDay('')
+    setExpectedMonth('')
+    setExpectedMonths(new Set())
+  }
+
+  function toggleMonth(m: number) {
+    const next = new Set(expectedMonths)
+    if (next.has(m)) { next.delete(m) } else { next.add(m) }
+    setExpectedMonths(next)
+  }
+
+  async function handleSave() {
+    if (!vendor.trim()) { setError('Please enter a vendor name.'); return }
+    const day    = expectedDay   ? parseInt(expectedDay)   : null
+    const month  = expectedMonth ? parseInt(expectedMonth) : null
+    const months = expectedMonths.size > 0 ? [...expectedMonths].sort((a, b) => a - b) : null
+    setSaving(true)
+    const err = await onSave({
+      vendor: vendor.trim(),
+      category_id: categoryId || null,
+      cadence,
+      expected_day: day,
+      expected_month: month,
+      expected_months: months,
+    })
+    setSaving(false)
+    if (err) { setError(err) } else { onClose() }
+  }
+
+  const isWeekly      = cadence === 'weekly' || cadence === 'biweekly'
+  const isSemiMonthly = cadence === 'semi-monthly'
+  const isMultiMonth  = cadence === 'quarterly' || cadence === 'biannually'
+  const isSingleMonth = cadence === 'annually'
+
+  return (
+    <div style={s.overlay} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div style={s.modal}>
+        <p style={{ fontSize: '17px', fontWeight: 600, color: 'var(--color-text)', margin: '0 0 4px 0' }}>
+          Edit Recurring Transaction
+        </p>
+        <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', margin: '0 0 16px 0' }}>
+          Update the details for this recurring entry.
+        </p>
+
+        <label style={s.modalLabel}>Category</label>
+        <select style={s.select} value={categoryId} onChange={e => setCategoryId(e.target.value)}>
+          <option value="">Uncategorized</option>
+          {categoryOptions.map(opt => (
+            <option key={opt.id} value={opt.id}>{opt.indent ? `  ${opt.label}` : opt.label}</option>
+          ))}
+        </select>
+
+        <label style={s.modalLabel}>Vendor</label>
+        <input
+          style={s.input}
+          value={vendor}
+          onChange={e => setVendor(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') onClose() }}
+        />
+
+        <label style={s.modalLabel}>Cadence</label>
+        <select style={s.select} value={cadence} onChange={e => handleCadenceChange(e.target.value)}>
+          <option value="weekly">Weekly</option>
+          <option value="biweekly">Biweekly</option>
+          <option value="semi-monthly">Semi-monthly (15th & last day)</option>
+          <option value="monthly">Monthly</option>
+          <option value="quarterly">Quarterly</option>
+          <option value="biannually">Biannually</option>
+          <option value="annually">Annually</option>
+        </select>
+
+        {isSemiMonthly ? (
+          <p style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '12px', padding: '8px 12px', background: 'var(--color-bg)', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
+            Occurrences are automatically computed as the 15th and last day of each month (14th & last for February).
+          </p>
+        ) : (
+          <>
+            <label style={s.modalLabel}>{isWeekly ? 'Expected day of week' : 'Expected day of month'}</label>
+            <select style={s.select} value={expectedDay} onChange={e => setExpectedDay(e.target.value)}>
+              <option value="">Not set</option>
+              {isWeekly
+                ? DAY_NAMES.map((d, i) => <option key={i + 1} value={i + 1}>{d}</option>)
+                : Array.from({ length: 31 }, (_, i) => i + 1).map(d => <option key={d} value={d}>{ordinal(d)}</option>)
+              }
+            </select>
+          </>
+        )}
+
+        {isSingleMonth && (
+          <>
+            <label style={s.modalLabel}>Expected month</label>
+            <select style={s.select} value={expectedMonth} onChange={e => setExpectedMonth(e.target.value)}>
+              <option value="">Not set</option>
+              {MONTH_NAMES.map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
+            </select>
+          </>
+        )}
+
+        {isMultiMonth && (
+          <>
+            <label style={s.modalLabel}>
+              Expected months
+              <span style={{ fontWeight: 400, color: 'var(--color-text-muted)', marginLeft: '6px' }}>select all that apply</span>
+            </label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              {MONTH_SHORT.map((m, i) => {
+                const monthNum = i + 1
+                const active = expectedMonths.has(monthNum)
+                return (
+                  <button key={monthNum} type="button" onClick={() => toggleMonth(monthNum)}
+                    style={{ ...s.toggleBtn(active), padding: '4px 10px', fontSize: '12px' }}>
+                    {m}
+                  </button>
+                )
+              })}
+            </div>
+          </>
+        )}
+
+        {error && (
+          <div style={{ marginTop: '12px', fontSize: '13px', padding: '8px 12px', borderRadius: '8px', background: 'rgba(224,107,107,0.1)', color: 'var(--color-expense)', border: '1px solid var(--color-expense)' }}>
+            {error}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '20px' }}>
+          <button style={s.btn('ghost')} onClick={onClose}>Cancel</button>
+          <button style={s.btn('primary')} onClick={handleSave} disabled={saving}>
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function RecurringTransactions({ typeFilter, onSuggestionCount }: { typeFilter: 'expense' | 'income'; onSuggestionCount?: (n: number) => void }) {
@@ -840,6 +1024,8 @@ export default function RecurringTransactions({ typeFilter, onSuggestionCount }:
   const [expandedCategoryParents, setExpandedCategoryParents] = useState<Set<string>>(new Set())
   const [graphRange, setGraphRange] = useState<GraphRange>(6)
   const [showAddModal, setShowAddModal] = useState(false)
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null)
+  const [editingEntry, setEditingEntry] = useState<RecurringEntry | null>(null)
   const [confirmingKey, setConfirmingKey] = useState<string | null>(null)
   const [confirmErrors, setConfirmErrors] = useState<Map<string, string>>(new Map())
   const [cadenceFilter, setCadenceFilter] = useState<Cadence | ''>('')
@@ -891,6 +1077,13 @@ export default function RecurringTransactions({ typeFilter, onSuggestionCount }:
     document.addEventListener('mousedown', onMouseDown)
     return () => document.removeEventListener('mousedown', onMouseDown)
   }, [graphCategoryOpen])
+
+  useEffect(() => {
+    if (!menuOpenId) return
+    function onDocClick() { setMenuOpenId(null) }
+    document.addEventListener('mousedown', onDocClick)
+    return () => document.removeEventListener('mousedown', onDocClick)
+  }, [menuOpenId])
 
   // ── Derived data ─────────────────────────────────────────────────────────────
 
@@ -1072,6 +1265,23 @@ export default function RecurringTransactions({ typeFilter, onSuggestionCount }:
   async function handleDelete(id: string) {
     await supabase.from('recurring_transactions').delete().eq('id', id)
     load()
+  }
+
+  async function handleSaveEdit(id: string, fields: {
+    vendor: string; category_id: string | null; cadence: Cadence
+    expected_day: number | null; expected_month: number | null; expected_months: number[] | null
+  }): Promise<string | null> {
+    const { error } = await supabase.from('recurring_transactions').update({
+      vendor: fields.vendor,
+      category_id: fields.category_id,
+      cadence: fields.cadence,
+      expected_day: fields.expected_day,
+      expected_month: fields.expected_month,
+      expected_months: fields.expected_months ? JSON.stringify(fields.expected_months) : null,
+    }).eq('id', id)
+    if (error) return error.message
+    load()
+    return null
   }
 
   async function handleExclude(txId: string) {
@@ -1424,12 +1634,40 @@ export default function RecurringTransactions({ typeFilter, onSuggestionCount }:
                   <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>
                     {isExpanded ? '▲' : '▼'}
                   </span>
-                  <button
-                    style={{ ...s.btn('ghost'), fontSize: '12px', padding: '3px 10px' }}
-                    onClick={e => { e.stopPropagation(); handleDelete(entry.id) }}
-                  >
-                    Remove
-                  </button>
+                  <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
+                    <button
+                      style={{ ...s.btn('ghost'), fontSize: '18px', padding: '2px 8px', lineHeight: 1, letterSpacing: '1px' }}
+                      onClick={e => { e.stopPropagation(); setMenuOpenId(menuOpenId === entry.id ? null : entry.id) }}
+                      title="More options"
+                    >
+                      ⋯
+                    </button>
+                    {menuOpenId === entry.id && (
+                      <div style={{
+                        position: 'absolute', right: 0, top: 'calc(100% + 4px)',
+                        background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+                        borderRadius: '8px', boxShadow: '0 4px 16px rgba(0,0,0,0.14)',
+                        zIndex: 300, minWidth: '120px', overflow: 'hidden',
+                      }}>
+                        <button
+                          style={{ display: 'block', width: '100%', textAlign: 'left', fontFamily: 'inherit', fontSize: '13px', padding: '9px 16px', background: 'transparent', border: 'none', color: 'var(--color-text)', cursor: 'pointer' }}
+                          onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-bg)')}
+                          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                          onClick={() => { setEditingEntry(entry); setMenuOpenId(null) }}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          style={{ display: 'block', width: '100%', textAlign: 'left', fontFamily: 'inherit', fontSize: '13px', padding: '9px 16px', background: 'transparent', border: 'none', color: 'var(--color-expense)', cursor: 'pointer' }}
+                          onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-bg)')}
+                          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                          onClick={() => { handleDelete(entry.id); setMenuOpenId(null) }}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -1529,6 +1767,16 @@ export default function RecurringTransactions({ typeFilter, onSuggestionCount }:
             </div>
           )
         })
+      )}
+
+      {/* Edit modal */}
+      {editingEntry && (
+        <EditRecurringModal
+          entry={editingEntry}
+          categoryOptions={categoryOptions}
+          onSave={fields => handleSaveEdit(editingEntry.id, fields)}
+          onClose={() => setEditingEntry(null)}
+        />
       )}
 
       {/* Add modal */}
