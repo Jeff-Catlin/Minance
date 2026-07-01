@@ -238,11 +238,10 @@ function AttainmentSection({
 }) {
   const up = (partial: Partial<AttainmentDisplay>) => onChange({ ...cfg, ...partial })
 
-  const stops: ColorStop[] = [...(cfg.overStops ?? [])].sort((a, b) => a.threshold - b.threshold)
+  const stops: ColorStop[] = cfg.overStops ?? []
 
   function updateStop(index: number, patch: Partial<ColorStop>) {
-    const next = stops.map((s, i) => i === index ? { ...s, ...patch } : s)
-    up({ overStops: next.sort((a, b) => a.threshold - b.threshold) })
+    up({ overStops: stops.map((s, i) => i === index ? { ...s, ...patch } : s) })
   }
 
   function removeStop(index: number) {
@@ -254,6 +253,11 @@ function AttainmentSection({
     const maxThreshold = stops.length > 0 ? Math.max(...stops.map(s => s.threshold)) : 0
     up({ overStops: [...stops, { threshold: maxThreshold + 10, color: '#EF4444' }] })
   }
+
+  const thresholds   = stops.map(s => s.threshold)
+  const hasDuplicate = new Set(thresholds).size < thresholds.length
+  const isOutOfOrder = thresholds.some((t, i) => i > 0 && t <= thresholds[i - 1])
+  const hasConflict  = hasDuplicate || isOutOfOrder
 
   const inputStyle: React.CSSProperties = {
     width: '58px', fontSize: '13px', padding: '4px 6px', borderRadius: '6px',
@@ -323,6 +327,11 @@ function AttainmentSection({
             >
               + Add threshold
             </button>
+            {hasConflict && (
+              <div style={{ fontSize: '12px', color: 'var(--color-expense)', marginTop: '6px' }}>
+                {hasDuplicate ? 'Duplicate thresholds detected.' : 'Thresholds must be in ascending order.'} The highest matching threshold will be used.
+              </div>
+            )}
           </div>
 
           <button
