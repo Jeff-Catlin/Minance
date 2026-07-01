@@ -711,8 +711,8 @@ export default function Dashboard({ onDrillDown, onUncatDrillDown }: DashboardPr
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
-        <h2 style={s.heading}>Dashboard</h2>
+      <div style={{ marginBottom: '6px' }}>
+        <h2 style={{ ...s.heading, marginBottom: '4px' }}>Dashboard</h2>
         <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>
           {formatDateRange(range.from, range.to)}
         </span>
@@ -764,21 +764,21 @@ export default function Dashboard({ onDrillDown, onUncatDrillDown }: DashboardPr
       ) : (
         <>
           {/* Summary cards + Calendar */}
-          <div style={{ display: 'flex', gap: '16px', alignItems: 'start', marginBottom: '24px' }}>
-            <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
-              <div style={s.summaryCard('var(--color-expense)')}>
+          <div style={{ display: 'flex', gap: '16px', alignItems: 'stretch', marginBottom: '24px' }}>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ ...s.summaryCard('var(--color-expense)'), flex: 1 }}>
                 <p style={s.summaryLabel}>Total Expenses</p>
                 <p style={s.summaryAmount('var(--color-expense)')}>
                   ${formatAmount(totalExpenses)}
                 </p>
               </div>
-              <div style={s.summaryCard('var(--color-income)')}>
+              <div style={{ ...s.summaryCard('var(--color-income)'), flex: 1 }}>
                 <p style={s.summaryLabel}>Total Income</p>
                 <p style={s.summaryAmount('var(--color-income)')}>
                   ${formatAmount(totalIncome)}
                 </p>
               </div>
-              <div style={s.summaryCard(totalIncome - totalExpenses >= 0 ? 'var(--color-income)' : 'var(--color-expense)')}>
+              <div style={{ ...s.summaryCard(totalIncome - totalExpenses >= 0 ? 'var(--color-income)' : 'var(--color-expense)'), flex: 1 }}>
                 <p style={s.summaryLabel}>Net</p>
                 <p style={s.summaryAmount(totalIncome - totalExpenses >= 0 ? 'var(--color-income)' : 'var(--color-expense)')}>
                   {totalIncome - totalExpenses >= 0 ? '+' : '−'}${formatAmount(Math.abs(totalIncome - totalExpenses))}
