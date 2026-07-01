@@ -6,18 +6,22 @@ import Dashboard from './components/Dashboard'
 import TransactionsScreen from './components/TransactionsScreen'
 import CategoryManager from './components/CategoryManager'
 import SavingsTab from './components/SavingsTab'
+import InvestmentsTab from './components/InvestmentsTab'
 import AccountsTab from './components/AccountsTab'
+import ResourcesTab from './components/ResourcesTab'
 import SettingsPage from './components/SettingsPage'
 import './App.css'
 
-type Screen = 'dashboard' | 'transactions' | 'categories' | 'savings' | 'accounts' | 'settings'
+type Screen = 'dashboard' | 'transactions' | 'categories' | 'savings' | 'investments' | 'accounts' | 'resources' | 'settings'
 
 const NAV_ITEMS: { key: Exclude<Screen, 'settings'>; label: string }[] = [
   { key: 'dashboard',    label: 'Dashboard' },
   { key: 'transactions', label: 'Transactions' },
   { key: 'categories',   label: 'Categories' },
   { key: 'savings',      label: 'Savings' },
+  { key: 'investments',  label: 'Investments' },
   { key: 'accounts',     label: 'Accounts' },
+  { key: 'resources',    label: 'Resources' },
 ]
 
 export default function App() {
@@ -192,7 +196,9 @@ export default function App() {
         {screen === 'transactions' && <TransactionsScreen initialFilter={txFilter} filterKey={txFilterKey} initialSubTab={txInitialSubTab ?? undefined} />}
         {screen === 'categories'   && <CategoryManager onMonthDrillDown={handleCategoryMonthDrillDown} />}
         {screen === 'savings'      && <SavingsTab />}
+        {screen === 'investments'  && <InvestmentsTab />}
         {screen === 'accounts'     && <AccountsTab onViewTransactions={handleAccountDrillDown} />}
+        {screen === 'resources'    && <ResourcesTab />}
         {screen === 'settings'     && <SettingsPage onBack={closeSettings} />}
       </main>
     </div>
