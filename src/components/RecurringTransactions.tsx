@@ -1723,7 +1723,7 @@ export default function RecurringTransactions({ typeFilter, onSuggestionCount }:
                   <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>
                     {isExpanded ? '▲' : '▼'}
                   </span>
-                  <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
+                  <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()}>
                     <button
                       style={{ ...s.btn('ghost'), fontSize: '18px', padding: '2px 8px', lineHeight: 1, letterSpacing: '1px' }}
                       onClick={e => { e.stopPropagation(); setMenuOpenId(menuOpenId === entry.id ? null : entry.id) }}
