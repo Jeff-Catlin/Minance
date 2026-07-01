@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useSettings, CURRENCY_SYMBOLS, EXPENSE_BAR_DEFAULTS, SAVINGS_BAR_DEFAULTS } from '../context/SettingsContext'
 import type { Currency, AppSettings, TaxFilingStatus, AttainmentDisplay, ColorStop } from '../context/SettingsContext'
 import { supabase } from '../lib/supabase'
@@ -221,6 +221,25 @@ function ColorPicker({ value, onChange }: { value: string; onChange: (v: string)
   )
 }
 
+function ThresholdInput({ value, style, onChange }: { value: number; style: React.CSSProperties; onChange: (n: number) => void }) {
+  const [local, setLocal] = useState(String(value))
+  useEffect(() => { setLocal(String(value)) }, [value])
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      value={local}
+      onChange={e => setLocal(e.target.value.replace(/[^0-9]/g, ''))}
+      onBlur={() => {
+        const n = Math.max(0, parseInt(local, 10) || 0)
+        setLocal(String(n))
+        onChange(n)
+      }}
+      style={style}
+    />
+  )
+}
+
 function AttainmentSection({
   title,
   description,
@@ -298,13 +317,10 @@ function AttainmentSection({
               {stops.map((stop, i) => (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 10px', background: 'var(--color-bg)', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
                   <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', flexShrink: 0 }}>≥</span>
-                  <input
-                    type="number"
-                    min={0}
-                    max={999}
+                  <ThresholdInput
                     value={stop.threshold}
-                    onChange={e => updateStop(i, { threshold: Math.max(0, Number(e.target.value)) })}
                     style={inputStyle}
+                    onChange={n => updateStop(i, { threshold: n })}
                   />
                   <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', flexShrink: 0 }}>% over</span>
                   <div style={{ flex: 1 }}>
