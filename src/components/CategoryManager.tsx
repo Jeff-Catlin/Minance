@@ -316,7 +316,7 @@ const G_BAR_H = 80, G_NEG = 24, G_LABEL_H = 18
 const G_H     = G_BAR_H + G_NEG + G_LABEL_H + 4   // 126
 
 function CategorySpendGraph({
-  monthlySpend, monthlyBudget, selectedYear, currencySymbol, isLoading, onMonthClick,
+  monthlySpend, monthlyBudget, selectedYear, currencySymbol, isLoading, onMonthClick, isIncome,
 }: {
   monthlySpend: number[]
   monthlyBudget: (number | null)[]
@@ -324,6 +324,7 @@ function CategorySpendGraph({
   currencySymbol: string
   isLoading: boolean
   onMonthClick?: (month: number) => void
+  isIncome?: boolean
 }) {
   const [hovMonth, setHovMonth] = useState<number | null>(null)
   const now = new Date()
@@ -346,8 +347,8 @@ function CategorySpendGraph({
   function bh(val: number)    { return Math.max(1, (val / maxVal) * G_BAR_H) }
   function bneg(val: number)  { return Math.min((Math.abs(val) / maxNeg) * (G_NEG - 3), G_NEG - 3) }
 
-  const SPEND_CLR  = 'var(--color-expense)'
-  const CREDIT_CLR = 'var(--color-income)'
+  const SPEND_CLR  = isIncome ? 'var(--color-income)'  : 'var(--color-expense)'
+  const CREDIT_CLR = isIncome ? 'var(--color-expense)' : 'var(--color-income)'
   const BUDGET_CLR = 'var(--color-primary-text)'
 
   return (
@@ -434,9 +435,13 @@ function CategorySpendGraph({
             <div style={{ fontWeight: 600, marginBottom: '4px' }}>{GRAPH_MONTHS[m]}</div>
             {!isFuture && spend !== 0 && (
               <div style={{ color: spend < 0 ? CREDIT_CLR : SPEND_CLR }}>
-                {spend < 0
-                  ? `${currencySymbol}${Math.abs(spend).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} credit`
-                  : `${currencySymbol}${spend.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} spent`}
+                {isIncome
+                  ? (spend < 0
+                    ? `${currencySymbol}${Math.abs(spend).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} deducted`
+                    : `${currencySymbol}${spend.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} earned`)
+                  : (spend < 0
+                    ? `${currencySymbol}${Math.abs(spend).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} credit`
+                    : `${currencySymbol}${spend.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} spent`)}
               </div>
             )}
             {budget !== null ? (
@@ -459,7 +464,7 @@ function CategorySpendGraph({
       <div style={{ display: 'flex', gap: '14px', marginTop: '6px', justifyContent: 'flex-end' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', color: 'var(--color-text-muted)' }}>
           <div style={{ width: '10px', height: '8px', background: SPEND_CLR, opacity: 0.75, borderRadius: '2px' }} />
-          Spent
+          {isIncome ? 'Earned' : 'Spent'}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', color: 'var(--color-text-muted)' }}>
           <div style={{ width: '10px', height: '8px', background: BUDGET_CLR, opacity: 0.6, borderRadius: '2px' }} />
@@ -810,40 +815,67 @@ export default function CategoryManager({ onMonthDrillDown }: { onMonthDrillDown
       )}
 
       {showGraph && parents.length > 0 && (() => {
-        const allIds = [...parents.map(p => p.id), ...subcategories.map(s => s.id)]
-        const totalSpend = Array.from({ length: 12 }, (_, m) => {
-          let sum = 0
-          for (const id of allIds) sum += (yearlySpendByCategory.get(id)?.[m] ?? 0)
-          return sum
-        })
-        const totalBudget = Array.from({ length: 12 }, (_, m) => {
-          let sum = 0; let hasAny = false
-          for (const [, b] of budgetsMap) {
-            const amt = getBudgetForMonth(b, m, selectedYear)
-            if (amt !== null) { sum += amt; hasAny = true }
-          }
-          return hasAny ? sum : null
-        })
+        const allIds     = [...parents.map(p => p.id), ...subcategories.map(s => s.id)]
+        const expenseIds = allIds.filter(id => typeMap.get(id) !== 'income')
+        const incomeIds  = allIds.filter(id => typeMap.get(id) === 'income')
+
+        const sumSpend = (ids: string[]) =>
+          Array.from({ length: 12 }, (_, m) => {
+            let sum = 0
+            for (const id of ids) sum += (yearlySpendByCategory.get(id)?.[m] ?? 0)
+            return sum
+          })
+        const sumBudget = (filterIncome: boolean) =>
+          Array.from({ length: 12 }, (_, m) => {
+            let sum = 0; let hasAny = false
+            for (const [catId, b] of budgetsMap) {
+              if ((typeMap.get(catId) === 'income') !== filterIncome) continue
+              const amt = getBudgetForMonth(b, m, selectedYear)
+              if (amt !== null) { sum += amt; hasAny = true }
+            }
+            return hasAny ? sum : null
+          })
+
         const totalMonthClick = onMonthDrillDown ? (m: number) => {
           const from = `${selectedYear}-${String(m + 1).padStart(2, '0')}-01`
           const to   = `${selectedYear}-${String(m + 1).padStart(2, '0')}-${String(new Date(selectedYear, m + 1, 0).getDate()).padStart(2, '0')}`
           onMonthDrillDown(null, from, to)
         } : undefined
+
         return (
-          <div style={{ ...s.card, marginBottom: '20px' }}>
-            <div style={s.cardHeader}>
-              <p style={s.parentName}>All Categories</p>
-              <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>{selectedYear} totals</span>
+          <>
+            <div style={{ ...s.card, marginBottom: '20px' }}>
+              <div style={s.cardHeader}>
+                <p style={s.parentName}>All Categories — Expenses</p>
+                <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>{selectedYear} totals</span>
+              </div>
+              <CategorySpendGraph
+                monthlySpend={sumSpend(expenseIds)}
+                monthlyBudget={sumBudget(false)}
+                selectedYear={selectedYear}
+                currencySymbol={currencySymbol}
+                isLoading={graphLoading}
+                onMonthClick={totalMonthClick}
+              />
             </div>
-            <CategorySpendGraph
-              monthlySpend={totalSpend}
-              monthlyBudget={totalBudget}
-              selectedYear={selectedYear}
-              currencySymbol={currencySymbol}
-              isLoading={graphLoading}
-              onMonthClick={totalMonthClick}
-            />
-          </div>
+            {incomeIds.length > 0 && (
+              <div style={{ ...s.card, marginBottom: '20px' }}>
+                <div style={s.cardHeader}>
+                  <p style={s.parentName}>All Categories — Income</p>
+                  <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>{selectedYear} totals</span>
+                </div>
+                <CategorySpendGraph
+                  monthlySpend={sumSpend(incomeIds)}
+                  monthlyBudget={sumBudget(true)}
+                  selectedYear={selectedYear}
+                  currencySymbol={currencySymbol}
+                  isLoading={graphLoading}
+                  onMonthClick={totalMonthClick}
+                  isIncome
+                />
+              </div>
+            )}
+          </>
         )
       })()}
 
@@ -910,6 +942,7 @@ export default function CategoryManager({ onMonthDrillDown }: { onMonthDrillDown
                           currencySymbol={currencySymbol}
                           isLoading={graphLoading}
                           onMonthClick={makeMonthClickHandler(sub.id)}
+                          isIncome={subIsIncome}
                         />
                       )}
                       {messages[sub.id] && <div style={s.notice(messages[sub.id].type)}>{messages[sub.id].text}</div>}
@@ -956,6 +989,7 @@ export default function CategoryManager({ onMonthDrillDown }: { onMonthDrillDown
                 currencySymbol={currencySymbol}
                 isLoading={graphLoading}
                 onMonthClick={makeMonthClickHandler(parent.id)}
+                isIncome={isIncome}
               />
             )}
           </div>
