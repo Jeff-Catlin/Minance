@@ -555,6 +555,14 @@ export default function CategoryManager({ onMonthDrillDown }: { onMonthDrillDown
     return m
   }, [budgets, selectedYear])
 
+  const priorBudgetsMap = useMemo(() => {
+    const m = new Map<string, CategoryBudget>()
+    for (const b of budgets) {
+      if (b.year === selectedYear - 1) m.set(b.category_id, b)
+    }
+    return m
+  }, [budgets, selectedYear])
+
   const archivedBudgetsMap = useMemo(() => {
     const m = new Map<string, CategoryBudget>()
     for (const b of archivedBudgetsData) m.set(b.category_id, b)
@@ -721,8 +729,11 @@ export default function CategoryManager({ onMonthDrillDown }: { onMonthDrillDown
     const allBudgets = (budgetData ?? []) as CategoryBudget[]
     if (!didRolloverRef.current) {
       didRolloverRef.current = true
-      const rolled = await performRollover(allBudgets, y)
-      if (rolled) {
+      const [rolled, rolledNext] = await Promise.all([
+        performRollover(allBudgets, y),
+        performRollover(allBudgets, y + 1),
+      ])
+      if (rolled || rolledNext) {
         const { data: refreshed } = await supabase.from('category_budgets').select('*').in('year', [y - 1, y, y + 1])
         setBudgets((refreshed ?? []) as CategoryBudget[])
       } else {
@@ -1262,6 +1273,7 @@ export default function CategoryManager({ onMonthDrillDown }: { onMonthDrillDown
         <SetBudgetModal
           category={budgetingCategory}
           existingBudget={budgetsMap.get(budgetingCategory.id) ?? null}
+          priorYearBudget={priorBudgetsMap.get(budgetingCategory.id) ?? null}
           year={selectedYear}
           onSave={() => { setBudgetingCategory(null); load() }}
           onClose={() => setBudgetingCategory(null)}
