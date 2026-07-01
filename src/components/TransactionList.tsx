@@ -239,10 +239,31 @@ export default function TransactionList({ initialFilter }: { initialFilter?: Dri
   }
 
   async function handleTypeChange(txId: string, newType: string) {
+    const tx = transactions.find(t => t.id === txId)
+    if (!tx) return
+
+    // When switching between expense and income, a negative amount means the
+    // current display is a credit (+ sign). Flip the sign so the credit
+    // direction is preserved after the type change.
+    const flippingExpenseIncome =
+      (tx.type === 'expense' && newType === 'income') ||
+      (tx.type === 'income'  && newType === 'expense')
+    const newAmount = flippingExpenseIncome && tx.amount < 0 ? -tx.amount : tx.amount
+
     setSaving(txId)
-    await supabase.from('transactions').update({ type: newType, category_id: newType === 'card_payment' ? null : undefined }).eq('id', txId)
+    await supabase.from('transactions').update({
+      type: newType,
+      amount: newAmount,
+      category_id: newType === 'card_payment' ? null : undefined,
+    }).eq('id', txId)
     setSaving(null)
-    setTransactions(prev => prev.map(t => t.id === txId ? { ...t, type: newType as 'expense' | 'income' | 'card_payment', category_id: newType === 'card_payment' ? null : t.category_id, categoryName: newType === 'card_payment' ? null : t.categoryName } : t))
+    setTransactions(prev => prev.map(t => t.id === txId ? {
+      ...t,
+      type: newType as 'expense' | 'income' | 'card_payment',
+      amount: newAmount,
+      category_id: newType === 'card_payment' ? null : t.category_id,
+      categoryName: newType === 'card_payment' ? null : t.categoryName,
+    } : t))
   }
 
   async function handleCategoryChange(txId: string, newCategoryId: string) {
