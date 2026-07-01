@@ -416,45 +416,121 @@ interface AddEntryModalProps {
 
 function AddEntryModal({ goal, onSave, onClose }: AddEntryModalProps) {
   const { currencySymbol } = useSettings()
-  const [date, setDate]     = useState(todayISO())
-  const [amount, setAmount] = useState('')
-  const [note, setNote]     = useState('')
-  const [error, setError]   = useState('')
-  const [saving, setSaving] = useState(false)
+  const [mode, setMode]           = useState<'single' | 'recurring'>('single')
+  const [date, setDate]           = useState(todayISO())
+  const [amount, setAmount]       = useState('')
+  const [note, setNote]           = useState('')
+  const [repeatEvery, setRepeatEvery] = useState('2')
+  const [repeatUnit, setRepeatUnit]   = useState<'weeks' | 'months'>('weeks')
+  const [occurrences, setOccurrences] = useState('10')
+  const [error, setError]         = useState('')
+  const [saving, setSaving]       = useState(false)
+
+  function buildDates(): string[] {
+    const n   = Math.max(1, Math.min(200, parseInt(occurrences) || 1))
+    const every = Math.max(1, parseInt(repeatEvery) || 1)
+    const dates: string[] = []
+    let cur = new Date(date + 'T12:00:00')
+    for (let i = 0; i < n; i++) {
+      dates.push(cur.toISOString().slice(0, 10))
+      if (repeatUnit === 'weeks') {
+        cur = new Date(cur.getTime() + every * 7 * 86_400_000)
+      } else {
+        cur = new Date(cur.getFullYear(), cur.getMonth() + every, cur.getDate(), 12)
+      }
+    }
+    return dates
+  }
+
+  const previewDates = mode === 'recurring' && date && occurrences && repeatEvery ? buildDates() : []
+  const previewEnd   = previewDates.length > 0 ? new Date(previewDates[previewDates.length - 1] + 'T12:00:00') : null
 
   async function handleSave() {
-    if (!date)                           { setError('Please select a date.'); return }
+    if (!date)                              { setError('Please select a date.'); return }
     if (!amount || parseFloat(amount) <= 0) { setError('Please enter a valid amount.'); return }
 
-    setSaving(true)
-    const { error: err } = await supabase.from('savings_entries').insert({
-      goal_id: goal.id,
-      date,
-      amount: parseFloat(amount),
-      note: note.trim() || null,
-    })
-    setSaving(false)
-    if (err) { setError(err.message); return }
+    if (mode === 'single') {
+      setSaving(true)
+      const { error: err } = await supabase.from('savings_entries').insert({
+        goal_id: goal.id, date, amount: parseFloat(amount), note: note.trim() || null,
+      })
+      setSaving(false)
+      if (err) { setError(err.message); return }
+    } else {
+      const dates = buildDates()
+      if (dates.length === 0) { setError('No dates generated.'); return }
+      setSaving(true)
+      const { error: err } = await supabase.from('savings_entries').insert(
+        dates.map(d => ({ goal_id: goal.id, date: d, amount: parseFloat(amount), note: note.trim() || null }))
+      )
+      setSaving(false)
+      if (err) { setError(err.message); return }
+    }
     onSave()
   }
 
+  const toggleStyle = (active: boolean): React.CSSProperties => ({
+    flex: 1, padding: '6px 0', fontSize: '13px', fontWeight: active ? 600 : 400,
+    fontFamily: 'inherit', border: '1px solid var(--color-border)', cursor: 'pointer',
+    background: active ? 'var(--color-primary)' : 'var(--color-bg)',
+    color: active ? '#fff' : 'var(--color-text)', borderRadius: '6px', transition: 'all 0.1s',
+  })
+
   return (
     <div style={s.overlay} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div style={{ ...s.modal, width: '360px' }}>
+      <div style={{ ...s.modal, width: '380px' }}>
         <p style={{ fontSize: '17px', fontWeight: 600, color: 'var(--color-text)', margin: '0 0 4px 0' }}>
           Add Contribution
         </p>
-        <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', margin: '0 0 20px 0' }}>
+        <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', margin: '0 0 16px 0' }}>
           {goal.name}
         </p>
 
-        <label style={s.label}>Date</label>
+        {/* Single / Recurring toggle */}
+        <div style={{ display: 'flex', gap: '6px', marginBottom: '16px' }}>
+          <button style={toggleStyle(mode === 'single')}   onClick={() => setMode('single')}>Single entry</button>
+          <button style={toggleStyle(mode === 'recurring')} onClick={() => setMode('recurring')}>Recurring entries</button>
+        </div>
+
+        <label style={s.label}>{mode === 'recurring' ? 'Start Date' : 'Date'}</label>
         <input style={s.input} type="date" value={date} onChange={e => setDate(e.target.value)} />
 
         <label style={s.label}>Amount ({currencySymbol})</label>
         <input style={s.input} type="number" min="0.01" step="0.01" value={amount}
           onChange={e => setAmount(e.target.value)} placeholder="0.00" autoFocus
           onKeyDown={e => e.key === 'Enter' && handleSave()} />
+
+        {mode === 'recurring' && (
+          <>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
+              <div style={{ flex: 1 }}>
+                <label style={s.label}>Repeat every</label>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <input style={{ ...s.input, width: '64px', flexShrink: 0 }} type="number" min="1" max="52"
+                    value={repeatEvery} onChange={e => setRepeatEvery(e.target.value)} />
+                  <select style={{ ...s.select, margin: 0 }} value={repeatUnit} onChange={e => setRepeatUnit(e.target.value as 'weeks' | 'months')}>
+                    <option value="weeks">weeks</option>
+                    <option value="months">months</option>
+                  </select>
+                </div>
+              </div>
+              <div style={{ width: '90px' }}>
+                <label style={s.label}>Occurrences</label>
+                <input style={s.input} type="number" min="1" max="200"
+                  value={occurrences} onChange={e => setOccurrences(e.target.value)} />
+              </div>
+            </div>
+
+            {previewDates.length > 0 && previewEnd && (
+              <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', padding: '8px 10px', background: 'var(--color-bg)', borderRadius: '6px', border: '1px solid var(--color-border)' }}>
+                Creates <strong style={{ color: 'var(--color-text)' }}>{previewDates.length} entries</strong> from{' '}
+                <strong style={{ color: 'var(--color-text)' }}>{new Date(previewDates[0] + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</strong>{' '}
+                to{' '}
+                <strong style={{ color: 'var(--color-text)' }}>{previewEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</strong>
+              </div>
+            )}
+          </>
+        )}
 
         <label style={s.label}>Note <span style={{ fontWeight: 400 }}>(optional)</span></label>
         <input style={s.input} value={note} onChange={e => setNote(e.target.value)}
@@ -469,7 +545,7 @@ function AddEntryModal({ goal, onSave, onClose }: AddEntryModalProps) {
         <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '20px' }}>
           <button style={s.btn('ghost')} onClick={onClose}>Cancel</button>
           <button style={s.btn('primary')} onClick={handleSave} disabled={saving}>
-            {saving ? 'Saving…' : 'Add'}
+            {saving ? 'Saving…' : mode === 'recurring' ? `Add ${previewDates.length || ''} entries` : 'Add'}
           </button>
         </div>
       </div>
