@@ -111,14 +111,13 @@ export default function RecurringCalendar() {
   const { currencySymbol } = useSettings()
   const now = useMemo(() => new Date(), [])
 
-  const minYear  = now.getFullYear()
-  const minMonth = now.getMonth()
-  const maxEnd   = new Date(minYear, minMonth + 11, 1)
-  const maxYear  = maxEnd.getFullYear()
-  const maxMonth = maxEnd.getMonth()
+  const thisYear  = now.getFullYear()
+  const firstYear = thisYear - 5
+  const lastYear  = thisYear + 2
+  const years     = Array.from({ length: lastYear - firstYear + 1 }, (_, i) => firstYear + i)
 
-  const [calYear,  setCalYear]  = useState(minYear)
-  const [calMonth, setCalMonth] = useState(minMonth)
+  const [calYear,  setCalYear]  = useState(thisYear)
+  const [calMonth, setCalMonth] = useState(now.getMonth())
   const [entries,  setEntries]  = useState<RecurringEntry[]>([])
   const [txns,     setTxns]     = useState<Transaction[]>([])
   const [loading,  setLoading]  = useState(true)
@@ -166,16 +165,8 @@ export default function RecurringCalendar() {
     return map
   }, [entries, txns, typeMap, calYear, calMonth])
 
-  // Dropdown: current month → +11 months
-  const dropdownMonths = useMemo(() => {
-    return Array.from({ length: 12 }, (_, i) => {
-      const d = new Date(minYear, minMonth + i, 1)
-      return { label: `${MONTH_ABBR[d.getMonth()]} ${d.getFullYear()}`, year: d.getFullYear(), month: d.getMonth() }
-    })
-  }, [minYear, minMonth])
-
-  const atMin = calYear === minYear && calMonth === minMonth
-  const atMax = calYear === maxYear && calMonth === maxMonth
+  const atMin = calYear === firstYear && calMonth === 0
+  const atMax = calYear === lastYear  && calMonth === 11
 
   function goBack() {
     if (atMin) return
@@ -185,14 +176,9 @@ export default function RecurringCalendar() {
     if (atMax) return
     if (calMonth === 11) { setCalYear(y => y + 1); setCalMonth(0) } else setCalMonth(m => m + 1)
   }
-  function handleSelect(e: React.ChangeEvent<HTMLSelectElement>) {
-    const o = dropdownMonths[+e.target.value]
-    setCalYear(o.year); setCalMonth(o.month)
-  }
 
   const firstDow    = new Date(calYear, calMonth, 1).getDay()
   const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate()
-  const dropIdx     = dropdownMonths.findIndex(o => o.year === calYear && o.month === calMonth)
 
   function borderStyle(day: number): React.CSSProperties {
     const total = (dayEvents.get(day) ?? []).filter(e => !e.isIncome).reduce((s, e) => s + e.amount, 0)
@@ -217,14 +203,21 @@ export default function RecurringCalendar() {
     <div style={{ width: '264px', flexShrink: 0, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '12px', padding: '16px' }}>
 
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', marginBottom: '10px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '10px' }}>
         <button style={btnStyle(atMin)} onClick={goBack} disabled={atMin}>‹</button>
         <select
-          value={dropIdx}
-          onChange={handleSelect}
-          style={{ flex: 1, fontFamily: 'inherit', fontSize: '13px', fontWeight: 600, background: 'transparent', border: 'none', color: 'var(--color-text)', cursor: 'pointer', textAlign: 'center', outline: 'none' }}
+          value={calMonth}
+          onChange={e => setCalMonth(+e.target.value)}
+          style={{ flex: 1, fontFamily: 'inherit', fontSize: '12px', fontWeight: 600, background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: '6px', color: 'var(--color-text)', cursor: 'pointer', padding: '3px 4px', outline: 'none' }}
         >
-          {dropdownMonths.map((o, i) => <option key={i} value={i}>{o.label}</option>)}
+          {MONTH_ABBR.map((m, i) => <option key={i} value={i}>{m}</option>)}
+        </select>
+        <select
+          value={calYear}
+          onChange={e => setCalYear(+e.target.value)}
+          style={{ fontFamily: 'inherit', fontSize: '12px', fontWeight: 600, background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: '6px', color: 'var(--color-text)', cursor: 'pointer', padding: '3px 4px', outline: 'none' }}
+        >
+          {years.map(y => <option key={y} value={y}>{y}</option>)}
         </select>
         <button style={btnStyle(atMax)} onClick={goForward} disabled={atMax}>›</button>
       </div>
