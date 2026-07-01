@@ -533,6 +533,20 @@ export default function CategoryManager({ onMonthDrillDown }: { onMonthDrillDown
   const [yearlySpendByCategory, setYearlySpendByCategory] = useState<Map<string, number[]>>(new Map())
   const [graphLoading, setGraphLoading]               = useState(false)
 
+  // Archived Categories panel
+  const [showArchivedCats, setShowArchivedCats]       = useState(false)
+  const [archivedCatsList, setArchivedCatsList]       = useState<Category[]>([])
+  const [archivedCatsLoading, setArchivedCatsLoading] = useState(false)
+
+  // Archived Budgets view
+  const [showArchivedBudgets, setShowArchivedBudgets] = useState(false)
+  const [archivedBudgetYears, setArchivedBudgetYears] = useState<number[]>([])
+  const [archivedBudgetYear, setArchivedBudgetYear]   = useState<number | null>(null)
+  const [archivedBudgetsData, setArchivedBudgetsData] = useState<CategoryBudget[]>([])
+  const [archivedBudgetCats, setArchivedBudgetCats]   = useState<Category[]>([])
+  const [archivedTypeMap, setArchivedTypeMap]         = useState<Map<string, 'expense' | 'income'>>(new Map())
+  const [archivedLoading, setArchivedLoading]         = useState(false)
+
   const budgetsMap = useMemo(() => {
     const m = new Map<string, CategoryBudget>()
     for (const b of budgets) {
@@ -540,6 +554,12 @@ export default function CategoryManager({ onMonthDrillDown }: { onMonthDrillDown
     }
     return m
   }, [budgets, selectedYear])
+
+  const archivedBudgetsMap = useMemo(() => {
+    const m = new Map<string, CategoryBudget>()
+    for (const b of archivedBudgetsData) m.set(b.category_id, b)
+    return m
+  }, [archivedBudgetsData])
 
   const isNextYear = selectedYear > currentYear
 
@@ -760,6 +780,78 @@ export default function CategoryManager({ onMonthDrillDown }: { onMonthDrillDown
     load()
   }
 
+  // ── Archived Categories ───────────────────────────────────────────────────
+
+  async function loadArchivedCats() {
+    setArchivedCatsLoading(true)
+    const { data } = await supabase.from('categories').select('*').eq('is_archived', true).order('name')
+    setArchivedCatsList((data ?? []) as Category[])
+    setArchivedCatsLoading(false)
+  }
+
+  async function handleUnarchive(cat: Category) {
+    await supabase.from('categories').update({ is_archived: false }).eq('id', cat.id)
+    await Promise.all([loadArchivedCats(), load()])
+  }
+
+  // ── Archived Budgets ──────────────────────────────────────────────────────
+
+  async function selectArchivedYear(year: number) {
+    setArchivedBudgetYear(year)
+    setArchivedLoading(true)
+
+    const [{ data: budgetData }, { data: typeTxns }] = await Promise.all([
+      supabase.from('category_budgets').select('*').eq('year', year),
+      supabase.from('transactions').select('category_id, type')
+        .gte('date', `${year}-01-01`).lte('date', `${year}-12-31`).not('category_id', 'is', null),
+    ])
+
+    const yearBudgets = (budgetData ?? []) as CategoryBudget[]
+    setArchivedBudgetsData(yearBudgets)
+
+    const tMap = new Map<string, 'expense' | 'income'>()
+    for (const t of typeTxns ?? []) {
+      if (t.category_id) tMap.set(t.category_id, t.type as 'expense' | 'income')
+    }
+    setArchivedTypeMap(tMap)
+
+    const catIds = yearBudgets.map(b => b.category_id)
+    if (catIds.length > 0) {
+      const { data: cats } = await supabase.from('categories').select('*').in('id', catIds)
+      const existingIds = new Set((cats ?? []).map((c: Category) => c.id))
+      const parentIds = (cats ?? []).map((c: Category) => c.parent_id).filter(Boolean) as string[]
+      let allCats = [...(cats ?? [])] as Category[]
+      if (parentIds.length > 0) {
+        const { data: parents } = await supabase.from('categories').select('*').in('id', parentIds)
+        for (const p of parents ?? []) {
+          if (!existingIds.has((p as Category).id)) allCats.push(p as Category)
+        }
+      }
+      setArchivedBudgetCats(allCats)
+    } else {
+      setArchivedBudgetCats([])
+    }
+
+    await loadYearlySpend(year)
+    setArchivedLoading(false)
+  }
+
+  async function openArchivedBudgets() {
+    setShowArchivedBudgets(true)
+    const { data } = await supabase.from('category_budgets').select('year').lt('year', currentYear)
+    const years = [...new Set((data ?? []).map(b => (b as { year: number }).year))].sort((a, b) => b - a)
+    setArchivedBudgetYears(years)
+    if (years.length > 0) await selectArchivedYear(years[0])
+  }
+
+  function exitArchivedBudgets() {
+    setShowArchivedBudgets(false)
+    setArchivedBudgetYear(null)
+    setArchivedBudgetsData([])
+    setArchivedBudgetCats([])
+    if (showGraph) loadYearlySpend(selectedYear)
+  }
+
   // ── Delete ────────────────────────────────────────────────────────────────
 
   async function handleDelete(cat: Category) {
@@ -788,6 +880,156 @@ export default function CategoryManager({ onMonthDrillDown }: { onMonthDrillDown
 
   if (loading) return <p style={{ color: 'var(--color-text-muted)' }}>Loading categories…</p>
 
+  // ── Archived Budgets view ─────────────────────────────────────────────────
+  if (showArchivedBudgets) {
+    const arcYear = archivedBudgetYear ?? currentYear - 1
+
+    const arcCatMonthlyBudgetArray = (categoryId: string): (number | null)[] => {
+      const b = archivedBudgetsMap.get(categoryId)
+      if (!b) return new Array(12).fill(null)
+      return Array.from({ length: 12 }, (_, m) => getBudgetForMonth(b, m, arcYear))
+    }
+
+    const arcParents = archivedBudgetCats.filter(c => c.parent_id === null)
+    const arcSubs    = archivedBudgetCats.filter(c => c.parent_id !== null)
+
+    const arcAllIds     = archivedBudgetCats.map(c => c.id)
+    const arcExpenseIds = arcAllIds.filter(id => archivedTypeMap.get(id) !== 'income')
+    const arcIncomeIds  = arcAllIds.filter(id => archivedTypeMap.get(id) === 'income')
+
+    const arcSumSpend = (ids: string[]) =>
+      Array.from({ length: 12 }, (_, m) => ids.reduce((s, id) => s + (yearlySpendByCategory.get(id)?.[m] ?? 0), 0))
+
+    const arcSumBudget = (forIncome: boolean) =>
+      Array.from({ length: 12 }, (_, m) => {
+        let sum = 0; let hasAny = false
+        for (const [catId, b] of archivedBudgetsMap) {
+          if ((archivedTypeMap.get(catId) === 'income') !== forIncome) continue
+          const amt = getBudgetForMonth(b, m, arcYear)
+          if (amt !== null) { sum += amt; hasAny = true }
+        }
+        return hasAny ? sum : null
+      })
+
+    const arcMonthClick = onMonthDrillDown ? (m: number) => {
+      const from = `${arcYear}-${String(m + 1).padStart(2, '0')}-01`
+      const to   = `${arcYear}-${String(m + 1).padStart(2, '0')}-${String(new Date(arcYear, m + 1, 0).getDate()).padStart(2, '0')}`
+      onMonthDrillDown(null, from, to)
+    } : undefined
+
+    const arcCatMonthClick = (categoryId: string) => onMonthDrillDown ? (m: number) => {
+      const from = `${arcYear}-${String(m + 1).padStart(2, '0')}-01`
+      const to   = `${arcYear}-${String(m + 1).padStart(2, '0')}-${String(new Date(arcYear, m + 1, 0).getDate()).padStart(2, '0')}`
+      onMonthDrillDown(categoryId, from, to)
+    } : undefined
+
+    return (
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+          <button onClick={exitArchivedBudgets} style={s.btn('ghost')}>← Back</button>
+          <h2 style={s.heading}>Archived Budgets</h2>
+          {archivedBudgetYears.length > 0 && (
+            <div style={{ display: 'flex', gap: '2px', background: 'var(--color-bg)', borderRadius: '8px', padding: '2px', border: '1px solid var(--color-border)' }}>
+              {archivedBudgetYears.map(yr => (
+                <button key={yr} onClick={() => selectArchivedYear(yr)} style={{ fontFamily: 'inherit', fontSize: '13px', fontWeight: archivedBudgetYear === yr ? 600 : 400, padding: '3px 10px', borderRadius: '6px', cursor: 'pointer', border: 'none', background: archivedBudgetYear === yr ? 'var(--color-surface)' : 'transparent', color: archivedBudgetYear === yr ? 'var(--color-text)' : 'var(--color-text-muted)', boxShadow: archivedBudgetYear === yr ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>
+                  {yr}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {archivedLoading && <p style={{ color: 'var(--color-text-muted)' }}>Loading…</p>}
+
+        {!archivedLoading && archivedBudgetYears.length === 0 && (
+          <p style={{ color: 'var(--color-text-muted)' }}>No prior year budget data found.</p>
+        )}
+
+        {!archivedLoading && archivedBudgetYear && (
+          <>
+            <div style={{ ...s.card, marginBottom: '20px' }}>
+              <div style={s.cardHeader}>
+                <p style={s.parentName}>All Categories — Expenses</p>
+                <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>{arcYear} totals</span>
+              </div>
+              <CategorySpendGraph
+                monthlySpend={arcSumSpend(arcExpenseIds)}
+                monthlyBudget={arcSumBudget(false)}
+                selectedYear={arcYear}
+                currencySymbol={currencySymbol}
+                isLoading={false}
+                onMonthClick={arcMonthClick}
+              />
+            </div>
+
+            {arcIncomeIds.length > 0 && (
+              <div style={{ ...s.card, marginBottom: '20px' }}>
+                <div style={s.cardHeader}>
+                  <p style={s.parentName}>All Categories — Income</p>
+                  <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>{arcYear} totals</span>
+                </div>
+                <CategorySpendGraph
+                  monthlySpend={arcSumSpend(arcIncomeIds)}
+                  monthlyBudget={arcSumBudget(true)}
+                  selectedYear={arcYear}
+                  currencySymbol={currencySymbol}
+                  isLoading={false}
+                  onMonthClick={arcMonthClick}
+                  isIncome
+                />
+              </div>
+            )}
+
+            {arcParents.map(parent => {
+              const children = arcSubs.filter(c => c.parent_id === parent.id)
+              const hasChildren = children.length > 0
+              const isIncome = archivedTypeMap.get(parent.id) === 'income' || children.some(c => archivedTypeMap.get(c.id) === 'income')
+              return (
+                <div key={parent.id} style={s.card}>
+                  <div style={s.cardHeader}>
+                    <p style={s.parentName}>{parent.name}</p>
+                  </div>
+                  {hasChildren && (
+                    <ul style={s.subList}>
+                      {children.map(sub => {
+                        const subIsIncome = archivedTypeMap.get(sub.id) === 'income' || isIncome
+                        return (
+                          <li key={sub.id} style={s.subItem}>
+                            <span style={s.subName}>{sub.name}</span>
+                            <CategorySpendGraph
+                              monthlySpend={catMonthlySpendArray(sub.id)}
+                              monthlyBudget={arcCatMonthlyBudgetArray(sub.id)}
+                              selectedYear={arcYear}
+                              currencySymbol={currencySymbol}
+                              isLoading={false}
+                              onMonthClick={arcCatMonthClick(sub.id)}
+                              isIncome={subIsIncome}
+                            />
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  )}
+                  {!hasChildren && (
+                    <CategorySpendGraph
+                      monthlySpend={catMonthlySpendArray(parent.id)}
+                      monthlyBudget={arcCatMonthlyBudgetArray(parent.id)}
+                      selectedYear={arcYear}
+                      currencySymbol={currencySymbol}
+                      isLoading={false}
+                      onMonthClick={arcCatMonthClick(parent.id)}
+                      isIncome={isIncome}
+                    />
+                  )}
+                </div>
+              )
+            })}
+          </>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
@@ -807,7 +1049,11 @@ export default function CategoryManager({ onMonthDrillDown }: { onMonthDrillDown
             BvA
           </button>
         </div>
-        <button style={s.btn('primary')} onClick={() => setAddModalFor('__top__')}>+ Add Category</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button style={s.btn('ghost')} onClick={() => { setShowArchivedCats(true); loadArchivedCats() }}>Archived Categories</button>
+          <button style={s.btn('ghost')} onClick={openArchivedBudgets}>Archived Budgets</button>
+          <button style={s.btn('primary')} onClick={() => setAddModalFor('__top__')}>+ Add Category</button>
+        </div>
       </div>
 
       {parents.length === 0 && (
@@ -1020,6 +1266,44 @@ export default function CategoryManager({ onMonthDrillDown }: { onMonthDrillDown
           onSave={() => { setBudgetingCategory(null); load() }}
           onClose={() => setBudgetingCategory(null)}
         />
+      )}
+
+      {showArchivedCats && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
+          <div style={{ background: 'var(--color-surface)', borderRadius: '16px', padding: '28px', width: '480px', maxWidth: '95vw', maxHeight: '80vh', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 600 }}>Archived Categories</h3>
+              <button onClick={() => setShowArchivedCats(false)} style={s.btn('ghost')}>✕</button>
+            </div>
+
+            {archivedCatsLoading && <p style={{ color: 'var(--color-text-muted)', margin: 0 }}>Loading…</p>}
+
+            {!archivedCatsLoading && archivedCatsList.length === 0 && (
+              <p style={{ color: 'var(--color-text-muted)', margin: 0 }}>No archived categories.</p>
+            )}
+
+            {!archivedCatsLoading && archivedCatsList.length > 0 && (
+              <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+                {archivedCatsList.map(cat => {
+                  const parentName = cat.parent_id
+                    ? (archivedCatsList.find(c => c.id === cat.parent_id)?.name ?? categories.find(c => c.id === cat.parent_id)?.name)
+                    : null
+                  return (
+                    <div key={cat.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid var(--color-border)' }}>
+                      <div>
+                        <span style={{ fontSize: '15px', color: 'var(--color-text)' }}>{cat.name}</span>
+                        {parentName && (
+                          <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginLeft: '8px' }}>under {parentName}</span>
+                        )}
+                      </div>
+                      <button onClick={() => handleUnarchive(cat)} style={s.btn('small')}>Unarchive</button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   )
