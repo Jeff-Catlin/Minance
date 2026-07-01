@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { useSettings } from './context/SettingsContext'
+import { useAuth } from './context/AuthContext'
+import AuthScreen from './components/AuthScreen'
 import Dashboard from './components/Dashboard'
 import TransactionsScreen from './components/TransactionsScreen'
 import CategoryManager from './components/CategoryManager'
@@ -19,7 +21,11 @@ const NAV_ITEMS: { key: Exclude<Screen, 'settings'>; label: string }[] = [
 ]
 
 export default function App() {
+  const { user, loading: authLoading } = useAuth()
   const { settings } = useSettings()
+
+  if (authLoading) return null
+  if (!user) return <AuthScreen />
   const [screen, setScreen] = useState<Screen>(settings.defaultLanding)
   const [prevScreen, setPrevScreen] = useState<Exclude<Screen, 'settings'>>('dashboard')
   const [txFilter, setTxFilter] = useState<{ categoryId?: string; accountId?: string; from?: string; to?: string; type?: 'expense' | 'income' } | null>(null)

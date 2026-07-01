@@ -568,43 +568,68 @@ export default function SettingsPage({ onBack: _onBack }: { onBack: () => void }
         borderRight: '1px solid var(--color-border)',
         paddingRight: '0',
         paddingTop: '4px',
+        display: 'flex',
+        flexDirection: 'column',
       }}>
-        {NAV.map((item, i) => {
-          const active = section === item.key
-          const isFirstSoon = item.soon && !NAV[i - 1]?.soon
-          return (
-            <div key={item.key}>
-              {isFirstSoon && <div style={{ height: '1px', background: 'var(--color-border)', margin: '8px 16px 8px 0' }} />}
-              <button
-                onClick={() => setSection(item.key)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  width: '100%',
-                  textAlign: 'left',
-                  padding: '9px 16px 9px 0',
-                  background: 'transparent',
-                  border: 'none',
-                  borderRight: active ? '2px solid var(--color-primary-text)' : '2px solid transparent',
-                  fontFamily: 'inherit',
-                  fontSize: '14px',
-                  fontWeight: active ? 600 : 400,
-                  color: active ? 'var(--color-primary-text)' : item.soon ? 'var(--color-text-muted)' : 'var(--color-text)',
-                  cursor: 'pointer',
-                  marginRight: '-1px',
-                }}
-              >
-                {item.label}
-                {item.soon && (
-                  <span style={{ fontSize: '10px', color: '#92400E', background: 'rgba(250,204,21,0.2)', border: '1px solid rgba(250,204,21,0.35)', borderRadius: '10px', padding: '1px 6px', fontWeight: 600 }}>
-                    Soon
-                  </span>
-                )}
-              </button>
-            </div>
-          )
-        })}
+        <div style={{ flex: 1 }}>
+          {NAV.map((item, i) => {
+            const active = section === item.key
+            const isFirstSoon = item.soon && !NAV[i - 1]?.soon
+            return (
+              <div key={item.key}>
+                {isFirstSoon && <div style={{ height: '1px', background: 'var(--color-border)', margin: '8px 16px 8px 0' }} />}
+                <button
+                  onClick={() => setSection(item.key)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    width: '100%',
+                    textAlign: 'left',
+                    padding: '9px 16px 9px 0',
+                    background: 'transparent',
+                    border: 'none',
+                    borderRight: active ? '2px solid var(--color-primary-text)' : '2px solid transparent',
+                    fontFamily: 'inherit',
+                    fontSize: '14px',
+                    fontWeight: active ? 600 : 400,
+                    color: active ? 'var(--color-primary-text)' : item.soon ? 'var(--color-text-muted)' : 'var(--color-text)',
+                    cursor: 'pointer',
+                    marginRight: '-1px',
+                  }}
+                >
+                  {item.label}
+                  {item.soon && (
+                    <span style={{ fontSize: '10px', color: '#92400E', background: 'rgba(250,204,21,0.2)', border: '1px solid rgba(250,204,21,0.35)', borderRadius: '10px', padding: '1px 6px', fontWeight: 600 }}>
+                      Soon
+                    </span>
+                  )}
+                </button>
+              </div>
+            )
+          })}
+        </div>
+
+        <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: '12px', marginTop: '12px' }}>
+          <button
+            onClick={() => supabase.auth.signOut()}
+            style={{
+              width: '100%',
+              textAlign: 'left',
+              padding: '9px 16px 9px 0',
+              background: 'transparent',
+              border: 'none',
+              borderRight: '2px solid transparent',
+              fontFamily: 'inherit',
+              fontSize: '14px',
+              color: 'var(--color-expense)',
+              cursor: 'pointer',
+              marginRight: '-1px',
+            }}
+          >
+            Sign out
+          </button>
+        </div>
       </div>
 
       {/* Content */}
