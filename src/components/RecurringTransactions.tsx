@@ -36,7 +36,7 @@ interface Suggestion {
 const CADENCE_LABELS: Record<Cadence, string> = {
   weekly: 'Weekly',
   biweekly: 'Biweekly',
-  'semi-monthly': 'Semi-monthly',
+  'semi-monthly': 'Twice monthly',
   monthly: 'Monthly',
   quarterly: 'Quarterly',
   biannually: 'Biannually',
@@ -138,7 +138,15 @@ function formatExpectedDate(cadence: Cadence, day: number | null, month: number 
     if (day !== null && day >= 1 && day <= 7) return `Expected on ${DAY_NAMES[day - 1]}s`
     return dayOfWeek ? `Expected on ${dayOfWeek}` : null
   }
-  if (cadence === 'semi-monthly') return 'Expected on the 15th & last day of each month'
+  if (cadence === 'semi-monthly') {
+    if (expectedMonthsJson) {
+      try {
+        const [d1, d2] = JSON.parse(expectedMonthsJson) as [number, number]
+        return `Expected on the ${ordinal(d1)} & ${d2 === 31 ? 'last day' : ordinal(d2)}`
+      } catch { /* fall through */ }
+    }
+    return 'Expected on the 15th & last day'
+  }
   if (!day) return null
   if (cadence === 'monthly') return `Expected around the ${ordinal(day)}`
   if (cadence === 'quarterly' || cadence === 'biannually') {
@@ -616,6 +624,9 @@ function AddRecurringModal({ categoryOptions, transactions, onSave, onClose }: A
   const [categoryId, setCategoryId] = useState('')
   const [vendor, setVendor] = useState('')
   const [cadence, setCadence] = useState<Cadence>('monthly')
+  const [biweeklyMode, setBiweeklyMode] = useState<'interval' | 'dates'>('interval')
+  const [semiDay1, setSemiDay1] = useState('15')
+  const [semiDay2, setSemiDay2] = useState('30')
   const [expectedDay, setExpectedDay] = useState('')
   const [expectedMonth, setExpectedMonth] = useState('')
   const [expectedMonths, setExpectedMonths] = useState<Set<number>>(new Set())
@@ -675,6 +686,7 @@ function AddRecurringModal({ categoryOptions, transactions, onSave, onClose }: A
 
   function handleCadenceChange(newCadence: string) {
     setCadence(newCadence as Cadence)
+    setBiweeklyMode('interval')
     setExpectedDay('')
     setExpectedMonth('')
     setExpectedMonths(new Set())
@@ -688,16 +700,21 @@ function AddRecurringModal({ categoryOptions, transactions, onSave, onClose }: A
 
   async function handleSave() {
     if (!vendor.trim()) { setError('Please enter a vendor name.'); return }
-    const day = expectedDay ? parseInt(expectedDay) : null
-    const month = expectedMonth ? parseInt(expectedMonth) : null
-    const months = expectedMonths.size > 0 ? [...expectedMonths].sort((a, b) => a - b) : null
+    const isTwiceMonthly = cadence === 'biweekly' && biweeklyMode === 'dates'
+    const saveCadence: Cadence = isTwiceMonthly ? 'semi-monthly' : cadence
+    const day    = isTwiceMonthly ? null : (expectedDay ? parseInt(expectedDay) : null)
+    const month  = isTwiceMonthly ? null : (expectedMonth ? parseInt(expectedMonth) : null)
+    const months = isTwiceMonthly
+      ? [parseInt(semiDay1), parseInt(semiDay2)].sort((a, b) => a - b)
+      : (expectedMonths.size > 0 ? [...expectedMonths].sort((a, b) => a - b) : null)
     setSaving(true)
-    const err = await onSave(vendor.trim(), categoryId || null, cadence, day, month, months)
+    const err = await onSave(vendor.trim(), categoryId || null, saveCadence, day, month, months)
     setSaving(false)
     if (err) { setError(err) } else { onClose() }
   }
 
-  const isWeekly = cadence === 'weekly' || cadence === 'biweekly'
+  const isTwiceMonthly = cadence === 'biweekly' && biweeklyMode === 'dates'
+  const isWeeklyInterval = cadence === 'weekly' || (cadence === 'biweekly' && biweeklyMode === 'interval')
   const isMultiMonth = cadence === 'quarterly' || cadence === 'biannually'
   const isSingleMonth = cadence === 'annually'
 
@@ -751,23 +768,52 @@ function AddRecurringModal({ categoryOptions, transactions, onSave, onClose }: A
         <select style={s.select} value={cadence} onChange={e => handleCadenceChange(e.target.value)}>
           <option value="weekly">Weekly</option>
           <option value="biweekly">Biweekly</option>
-          <option value="semi-monthly">Semi-monthly (15th & last day)</option>
           <option value="monthly">Monthly</option>
           <option value="quarterly">Quarterly</option>
           <option value="biannually">Biannually</option>
           <option value="annually">Annually</option>
         </select>
 
-        {cadence === 'semi-monthly' ? (
-          <p style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '12px', padding: '8px 12px', background: 'var(--color-bg)', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
-            Occurrences are automatically computed as the 15th and last day of each month (14th & last for February).
-          </p>
+        {cadence === 'biweekly' && (
+          <>
+            <label style={s.modalLabel}>Schedule</label>
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <button type="button" style={{ ...s.toggleBtn(biweeklyMode === 'interval'), fontSize: '12px', padding: '5px 12px' }} onClick={() => setBiweeklyMode('interval')}>
+                Every 14 days
+              </button>
+              <button type="button" style={{ ...s.toggleBtn(biweeklyMode === 'dates'), fontSize: '12px', padding: '5px 12px' }} onClick={() => setBiweeklyMode('dates')}>
+                Twice monthly
+              </button>
+            </div>
+          </>
+        )}
+
+        {isTwiceMonthly ? (
+          <>
+            <label style={s.modalLabel}>Days of month</label>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <select style={{ ...s.select, flex: 1 }} value={semiDay1} onChange={e => setSemiDay1(e.target.value)}>
+                {Array.from({ length: 31 }, (_, i) => i + 1).map(d => (
+                  <option key={d} value={d}>{d === 31 ? '31st / End of month' : ordinal(d)}</option>
+                ))}
+              </select>
+              <span style={{ color: 'var(--color-text-muted)', flexShrink: 0 }}>&amp;</span>
+              <select style={{ ...s.select, flex: 1 }} value={semiDay2} onChange={e => setSemiDay2(e.target.value)}>
+                {Array.from({ length: 31 }, (_, i) => i + 1).map(d => (
+                  <option key={d} value={d}>{d === 31 ? '31st / End of month' : ordinal(d)}</option>
+                ))}
+              </select>
+            </div>
+            <p style={{ fontSize: '11px', color: 'var(--color-text-muted)', margin: '5px 0 0' }}>
+              Days are clamped to the last day of shorter months (e.g. Feb).
+            </p>
+          </>
         ) : (
           <>
-            <label style={{ ...s.modalLabel }}>{isWeekly ? 'Expected day of week' : 'Expected day of month'}</label>
+            <label style={{ ...s.modalLabel }}>{isWeeklyInterval ? 'Expected day of week' : 'Expected day of month'}</label>
             <select style={s.select} value={expectedDay} onChange={e => setExpectedDay(e.target.value)}>
               <option value="">Not set</option>
-              {isWeekly
+              {isWeeklyInterval
                 ? DAY_NAMES.map((d, i) => <option key={i + 1} value={i + 1}>{d}</option>)
                 : Array.from({ length: 31 }, (_, i) => i + 1).map(d => <option key={d} value={d}>{ordinal(d)}</option>)
               }
@@ -844,13 +890,22 @@ interface EditModalProps {
 }
 
 function EditRecurringModal({ entry, categoryOptions, onSave, onClose }: EditModalProps) {
+  const isSemiEntry = entry.cadence === 'semi-monthly'
+  const parsedSemiDays: [number, number] = (() => {
+    if (!entry.expected_months) return [15, 30]
+    try { const d = JSON.parse(entry.expected_months) as number[]; return [d[0] ?? 15, d[1] ?? 30] } catch { return [15, 30] }
+  })()
+
   const [vendor, setVendor] = useState(entry.vendor)
   const [categoryId, setCategoryId] = useState(entry.category_id ?? '')
-  const [cadence, setCadence] = useState<Cadence>(entry.cadence)
+  const [cadence, setCadence] = useState<Cadence>(isSemiEntry ? 'biweekly' : entry.cadence)
+  const [biweeklyMode, setBiweeklyMode] = useState<'interval' | 'dates'>(isSemiEntry ? 'dates' : 'interval')
+  const [semiDay1, setSemiDay1] = useState(String(parsedSemiDays[0]))
+  const [semiDay2, setSemiDay2] = useState(String(parsedSemiDays[1]))
   const [expectedDay, setExpectedDay] = useState(entry.expected_day ? String(entry.expected_day) : '')
   const [expectedMonth, setExpectedMonth] = useState(entry.expected_month ? String(entry.expected_month) : '')
   const [expectedMonths, setExpectedMonths] = useState<Set<number>>(() => {
-    if (!entry.expected_months) return new Set()
+    if (isSemiEntry || !entry.expected_months) return new Set()
     try { return new Set(JSON.parse(entry.expected_months) as number[]) } catch { return new Set() }
   })
   const [error, setError] = useState('')
@@ -858,6 +913,7 @@ function EditRecurringModal({ entry, categoryOptions, onSave, onClose }: EditMod
 
   function handleCadenceChange(newCadence: string) {
     setCadence(newCadence as Cadence)
+    setBiweeklyMode('interval')
     setExpectedDay('')
     setExpectedMonth('')
     setExpectedMonths(new Set())
@@ -871,14 +927,18 @@ function EditRecurringModal({ entry, categoryOptions, onSave, onClose }: EditMod
 
   async function handleSave() {
     if (!vendor.trim()) { setError('Please enter a vendor name.'); return }
-    const day    = expectedDay   ? parseInt(expectedDay)   : null
-    const month  = expectedMonth ? parseInt(expectedMonth) : null
-    const months = expectedMonths.size > 0 ? [...expectedMonths].sort((a, b) => a - b) : null
+    const isTwiceMonthly = cadence === 'biweekly' && biweeklyMode === 'dates'
+    const saveCadence: Cadence = isTwiceMonthly ? 'semi-monthly' : cadence
+    const day    = isTwiceMonthly ? null : (expectedDay   ? parseInt(expectedDay)   : null)
+    const month  = isTwiceMonthly ? null : (expectedMonth ? parseInt(expectedMonth) : null)
+    const months = isTwiceMonthly
+      ? [parseInt(semiDay1), parseInt(semiDay2)].sort((a, b) => a - b)
+      : (expectedMonths.size > 0 ? [...expectedMonths].sort((a, b) => a - b) : null)
     setSaving(true)
     const err = await onSave({
       vendor: vendor.trim(),
       category_id: categoryId || null,
-      cadence,
+      cadence: saveCadence,
       expected_day: day,
       expected_month: month,
       expected_months: months,
@@ -887,10 +947,10 @@ function EditRecurringModal({ entry, categoryOptions, onSave, onClose }: EditMod
     if (err) { setError(err) } else { onClose() }
   }
 
-  const isWeekly      = cadence === 'weekly' || cadence === 'biweekly'
-  const isSemiMonthly = cadence === 'semi-monthly'
-  const isMultiMonth  = cadence === 'quarterly' || cadence === 'biannually'
-  const isSingleMonth = cadence === 'annually'
+  const isTwiceMonthly   = cadence === 'biweekly' && biweeklyMode === 'dates'
+  const isWeeklyInterval = cadence === 'weekly' || (cadence === 'biweekly' && biweeklyMode === 'interval')
+  const isMultiMonth     = cadence === 'quarterly' || cadence === 'biannually'
+  const isSingleMonth    = cadence === 'annually'
 
   return (
     <div style={s.overlay} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
@@ -922,23 +982,52 @@ function EditRecurringModal({ entry, categoryOptions, onSave, onClose }: EditMod
         <select style={s.select} value={cadence} onChange={e => handleCadenceChange(e.target.value)}>
           <option value="weekly">Weekly</option>
           <option value="biweekly">Biweekly</option>
-          <option value="semi-monthly">Semi-monthly (15th & last day)</option>
           <option value="monthly">Monthly</option>
           <option value="quarterly">Quarterly</option>
           <option value="biannually">Biannually</option>
           <option value="annually">Annually</option>
         </select>
 
-        {isSemiMonthly ? (
-          <p style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '12px', padding: '8px 12px', background: 'var(--color-bg)', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
-            Occurrences are automatically computed as the 15th and last day of each month (14th & last for February).
-          </p>
+        {cadence === 'biweekly' && (
+          <>
+            <label style={s.modalLabel}>Schedule</label>
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <button type="button" style={{ ...s.toggleBtn(biweeklyMode === 'interval'), fontSize: '12px', padding: '5px 12px' }} onClick={() => setBiweeklyMode('interval')}>
+                Every 14 days
+              </button>
+              <button type="button" style={{ ...s.toggleBtn(biweeklyMode === 'dates'), fontSize: '12px', padding: '5px 12px' }} onClick={() => setBiweeklyMode('dates')}>
+                Twice monthly
+              </button>
+            </div>
+          </>
+        )}
+
+        {isTwiceMonthly ? (
+          <>
+            <label style={s.modalLabel}>Days of month</label>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <select style={{ ...s.select, flex: 1 }} value={semiDay1} onChange={e => setSemiDay1(e.target.value)}>
+                {Array.from({ length: 31 }, (_, i) => i + 1).map(d => (
+                  <option key={d} value={d}>{d === 31 ? '31st / End of month' : ordinal(d)}</option>
+                ))}
+              </select>
+              <span style={{ color: 'var(--color-text-muted)', flexShrink: 0 }}>&amp;</span>
+              <select style={{ ...s.select, flex: 1 }} value={semiDay2} onChange={e => setSemiDay2(e.target.value)}>
+                {Array.from({ length: 31 }, (_, i) => i + 1).map(d => (
+                  <option key={d} value={d}>{d === 31 ? '31st / End of month' : ordinal(d)}</option>
+                ))}
+              </select>
+            </div>
+            <p style={{ fontSize: '11px', color: 'var(--color-text-muted)', margin: '5px 0 0' }}>
+              Days are clamped to the last day of shorter months (e.g. Feb).
+            </p>
+          </>
         ) : (
           <>
-            <label style={s.modalLabel}>{isWeekly ? 'Expected day of week' : 'Expected day of month'}</label>
+            <label style={s.modalLabel}>{isWeeklyInterval ? 'Expected day of week' : 'Expected day of month'}</label>
             <select style={s.select} value={expectedDay} onChange={e => setExpectedDay(e.target.value)}>
               <option value="">Not set</option>
-              {isWeekly
+              {isWeeklyInterval
                 ? DAY_NAMES.map((d, i) => <option key={i + 1} value={i + 1}>{d}</option>)
                 : Array.from({ length: 31 }, (_, i) => i + 1).map(d => <option key={d} value={d}>{ordinal(d)}</option>)
               }
@@ -1453,7 +1542,7 @@ export default function RecurringTransactions({ typeFilter, onSuggestionCount }:
                     borderRadius: '8px', padding: '6px 0', boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
                     minWidth: '150px',
                   }}>
-                    {(['weekly', 'biweekly', 'monthly', 'quarterly', 'biannually', 'annually'] as Cadence[]).filter(c => availableCadences.has(c)).map(c => {
+                    {(['weekly', 'biweekly', 'semi-monthly', 'monthly', 'quarterly', 'biannually', 'annually'] as Cadence[]).filter(c => availableCadences.has(c)).map(c => {
                       const checked = graphFilter.has(c)
                       return (
                         <label key={c} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 14px', cursor: 'pointer', fontSize: '13px', color: 'var(--color-text)' }}>

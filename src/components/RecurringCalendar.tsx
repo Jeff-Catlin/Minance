@@ -79,8 +79,14 @@ function occurrenceDaysInMonth(
     }
 
   } else if (entry.cadence === 'semi-monthly') {
-    const mid = Math.floor(cap / 2)
-    days.push(mid, cap)
+    if (entry.expected_months) {
+      try {
+        const [d1, d2] = JSON.parse(entry.expected_months) as [number, number]
+        days.push(Math.min(d1, cap), Math.min(d2, cap))
+      } catch { days.push(Math.floor(cap / 2), cap) }
+    } else {
+      days.push(Math.floor(cap / 2), cap)
+    }
 
   } else if (entry.cadence === 'quarterly') {
     let months: number[] = []
