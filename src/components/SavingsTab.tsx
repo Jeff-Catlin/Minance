@@ -17,6 +17,7 @@ interface SavingsGoal {
   tracking_mode: TrackingMode
   target_amount: number
   year: number | null
+  opening_balance: number | null
   linked_category_id: string | null
   notes: string | null
   is_archived: boolean
@@ -100,7 +101,7 @@ function calcProgress(
   transactions: Transaction[],
   assignedToGoalMap: Map<string, GoalAssignment[]>,
   assignedTxIds: Set<string>,
-): { total: number; fromEntries: number; fromCategory: number; fromAssigned: number } {
+): { total: number; fromEntries: number; fromCategory: number; fromAssigned: number; fromOpening: number } {
   const entries = entriesByGoal.get(goal.id) ?? []
   const explicitAssignments = assignedToGoalMap.get(goal.id) ?? []
 
@@ -130,7 +131,8 @@ function calcProgress(
     }
   }
 
-  return { total: fromEntries + fromCategory + fromAssigned, fromEntries, fromCategory, fromAssigned }
+  const fromOpening = goal.tracking_mode === 'balance_target' ? (goal.opening_balance ?? 0) : 0
+  return { total: fromOpening + fromEntries + fromCategory + fromAssigned, fromEntries, fromCategory, fromAssigned, fromOpening }
 }
 
 // ── Styles ────────────────────────────────────────────────────────────────────
@@ -257,10 +259,11 @@ function GoalModal({ categories, userAge, existingGoal, onSave, onClose }: AddGo
   const [mode, setMode]             = useState<TrackingMode>(existingGoal?.tracking_mode ?? 'annual_contribution')
   const [target, setTarget]         = useState(existingGoal?.target_amount != null ? String(existingGoal.target_amount) : '')
   const [year, setYear]             = useState(existingGoal?.year != null ? String(existingGoal.year) : String(new Date().getFullYear()))
-  const [linkedCat, setLinkedCat]   = useState(existingGoal?.linked_category_id ?? '')
-  const [notes, setNotes]           = useState(existingGoal?.notes ?? '')
-  const [error, setError]           = useState('')
-  const [saving, setSaving]         = useState(false)
+  const [linkedCat, setLinkedCat]       = useState(existingGoal?.linked_category_id ?? '')
+  const [openingBalance, setOpeningBalance] = useState(existingGoal?.opening_balance != null ? String(existingGoal.opening_balance) : '')
+  const [notes, setNotes]               = useState(existingGoal?.notes ?? '')
+  const [error, setError]               = useState('')
+  const [saving, setSaving]             = useState(false)
 
   function handleTypeChange(type: string) {
     setGoalType(type)
@@ -296,6 +299,9 @@ function GoalModal({ categories, userAge, existingGoal, onSave, onClose }: AddGo
       tracking_mode: mode,
       target_amount: parseFloat(target),
       year: mode === 'annual_contribution' ? parseInt(year) : null,
+      opening_balance: mode === 'balance_target' && openingBalance && !isNaN(parseFloat(openingBalance))
+        ? parseFloat(openingBalance)
+        : null,
       linked_category_id: linkedCat || null,
       notes: notes.trim() || null,
     }
@@ -357,6 +363,17 @@ function GoalModal({ categories, userAge, existingGoal, onSave, onClose }: AddGo
             </div>
           )}
         </div>
+
+        {mode === 'balance_target' && (
+          <div>
+            <label style={s.label}>Opening Balance <span style={{ fontWeight: 400 }}>(optional)</span></label>
+            <input style={s.input} type="number" min="0" step="0.01" value={openingBalance}
+              onChange={e => setOpeningBalance(e.target.value)} placeholder="0.00" />
+            <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '4px' }}>
+              Amount already saved before this goal was created. Counts toward your progress but won't appear as an entry.
+            </div>
+          </div>
+        )}
 
         <label style={s.label}>Link to Category <span style={{ fontWeight: 400 }}>(optional)</span></label>
         <select style={s.select} value={linkedCat} onChange={e => setLinkedCat(e.target.value)}>
@@ -551,7 +568,8 @@ export default function SavingsTab() {
   const [showAllGoals, setShowAllGoals] = useState<Set<string>>(new Set())
   const [showArchived, setShowArchived] = useState(false)
   const [menuGoalId, setMenuGoalId]   = useState<string | null>(null)
-  const menuRef = useRef<HTMLDivElement>(null)
+  const menuRef          = useRef<HTMLDivElement>(null)
+  const didMaintenanceRef = useRef(false)
   const [reassigning, setReassigning] = useState<{ tx: Transaction; fromGoal: SavingsGoal } | null>(null)
 
   const CONTRIBUTION_LIMIT = 10
@@ -583,7 +601,56 @@ export default function SavingsTab() {
       supabase.from('accounts').select('*'),
       supabase.from('savings_goal_transactions').select('*'),
     ])
-    setGoals(g ?? [])
+
+    let allGoals = (g ?? []) as SavingsGoal[]
+
+    if (!didMaintenanceRef.current) {
+      didMaintenanceRef.current = true
+      const now         = new Date()
+      const currentYear = now.getFullYear()
+      const isPastMay   = now.getMonth() >= 5  // June = month index 5
+
+      const annualGoals    = allGoals.filter(goal => goal.tracking_mode === 'annual_contribution' && goal.year !== null)
+      const priorYearGoals = annualGoals.filter(goal => goal.year! < currentYear && !goal.is_archived)
+      const currentYearKeys = new Set(annualGoals.filter(goal => goal.year === currentYear).map(goal => `${goal.goal_type}|||${goal.name}`))
+
+      // Rollover: create current-year copy for any prior-year goal not already present
+      const toRollover = annualGoals
+        .filter(goal => goal.year === currentYear - 1)
+        .filter(goal => !currentYearKeys.has(`${goal.goal_type}|||${goal.name}`))
+
+      // Archive: prior-year annual goals once June 1 arrives
+      const toArchive = isPastMay ? priorYearGoals.map(goal => goal.id) : []
+
+      const anyWork = toRollover.length > 0 || toArchive.length > 0
+
+      if (toRollover.length > 0) {
+        await supabase.from('savings_goals').insert(
+          toRollover.map(goal => ({
+            name:               goal.name,
+            goal_type:          goal.goal_type,
+            tracking_mode:      'annual_contribution' as const,
+            target_amount:      goal.target_amount,
+            year:               currentYear,
+            linked_category_id: goal.linked_category_id,
+            notes:              goal.notes,
+          }))
+        )
+      }
+
+      if (toArchive.length > 0) {
+        await supabase.from('savings_goals').update({ is_archived: true }).in('id', toArchive)
+      }
+
+      if (anyWork) {
+        const { data: refreshed } = await supabase.from('savings_goals').select('*')
+          .order('sort_order', { ascending: true, nullsFirst: false })
+          .order('created_at', { ascending: true })
+        allGoals = (refreshed ?? []) as SavingsGoal[]
+      }
+    }
+
+    setGoals(allGoals)
     setEntries(e ?? [])
     setTxns(t ?? [])
     setCategories(c ?? [])
@@ -730,7 +797,7 @@ export default function SavingsTab() {
       {/* Goal cards */}
       {visibleGoals.map(goal => {
         const cfg = GOAL_TYPES[goal.goal_type] ?? GOAL_TYPES.custom
-        const { total, fromEntries: fe, fromCategory: fc, fromAssigned: fa } = calcProgress(goal, entriesByGoal, transactions, assignedToGoalMap, assignedTxIds)
+        const { total, fromEntries: fe, fromCategory: fc, fromAssigned: fa, fromOpening: fo } = calcProgress(goal, entriesByGoal, transactions, assignedToGoalMap, assignedTxIds)
         const pct = goal.target_amount > 0 ? Math.min((total / goal.target_amount) * 100, 100) : 0
         const over = total > goal.target_amount
         const isOpen = expanded.has(goal.id)
@@ -831,8 +898,13 @@ export default function SavingsTab() {
                   {over && <span style={{ color: 'var(--color-income)', marginLeft: '6px' }}>✓ Goal reached!</span>}
                 </span>
               </div>
-              {(fe > 0 || fc > 0 || fa > 0) && (
+              {(fo > 0 || fe > 0 || fc > 0 || fa > 0) && (
                 <div style={{ display: 'flex', gap: '16px', marginTop: '4px' }}>
+                  {fo > 0 && (
+                    <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>
+                      Starting: {formatAmount(fo, currencySymbol)}
+                    </span>
+                  )}
                   {fe > 0 && (
                     <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>
                       Manual: {formatAmount(fe, currencySymbol)}
