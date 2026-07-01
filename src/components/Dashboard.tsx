@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import type { Category, Transaction, TransactionSplit } from '../types'
 import { useSettings } from '../context/SettingsContext'
 import ProgressBar from './ProgressBar'
+import RecurringCalendar from './RecurringCalendar'
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
@@ -169,7 +170,6 @@ const s = {
     display: 'grid',
     gridTemplateColumns: 'repeat(3, 1fr)',
     gap: '12px',
-    marginBottom: '24px',
   } as React.CSSProperties,
 
   summaryCard: (color: string) => ({
@@ -763,26 +763,29 @@ export default function Dashboard({ onDrillDown, onUncatDrillDown }: DashboardPr
         <p style={{ color: 'var(--color-text-muted)' }}>Loading…</p>
       ) : (
         <>
-          {/* Summary cards */}
-          <div style={s.summaryGrid}>
-            <div style={s.summaryCard('var(--color-expense)')}>
-              <p style={s.summaryLabel}>Total Expenses</p>
-              <p style={s.summaryAmount('var(--color-expense)')}>
-                ${formatAmount(totalExpenses)}
-              </p>
+          {/* Summary cards + Calendar */}
+          <div style={{ display: 'flex', gap: '16px', alignItems: 'start', marginBottom: '24px' }}>
+            <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
+              <div style={s.summaryCard('var(--color-expense)')}>
+                <p style={s.summaryLabel}>Total Expenses</p>
+                <p style={s.summaryAmount('var(--color-expense)')}>
+                  ${formatAmount(totalExpenses)}
+                </p>
+              </div>
+              <div style={s.summaryCard('var(--color-income)')}>
+                <p style={s.summaryLabel}>Total Income</p>
+                <p style={s.summaryAmount('var(--color-income)')}>
+                  ${formatAmount(totalIncome)}
+                </p>
+              </div>
+              <div style={s.summaryCard(totalIncome - totalExpenses >= 0 ? 'var(--color-income)' : 'var(--color-expense)')}>
+                <p style={s.summaryLabel}>Net</p>
+                <p style={s.summaryAmount(totalIncome - totalExpenses >= 0 ? 'var(--color-income)' : 'var(--color-expense)')}>
+                  {totalIncome - totalExpenses >= 0 ? '+' : '−'}${formatAmount(Math.abs(totalIncome - totalExpenses))}
+                </p>
+              </div>
             </div>
-            <div style={s.summaryCard('var(--color-income)')}>
-              <p style={s.summaryLabel}>Total Income</p>
-              <p style={s.summaryAmount('var(--color-income)')}>
-                ${formatAmount(totalIncome)}
-              </p>
-            </div>
-            <div style={s.summaryCard(totalIncome - totalExpenses >= 0 ? 'var(--color-income)' : 'var(--color-expense)')}>
-              <p style={s.summaryLabel}>Net</p>
-              <p style={s.summaryAmount(totalIncome - totalExpenses >= 0 ? 'var(--color-income)' : 'var(--color-expense)')}>
-                {totalIncome - totalExpenses >= 0 ? '+' : '−'}${formatAmount(Math.abs(totalIncome - totalExpenses))}
-              </p>
-            </div>
+            <RecurringCalendar />
           </div>
 
           {/* Expenses breakdown */}
