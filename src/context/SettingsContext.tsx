@@ -20,28 +20,27 @@ export type TaxFilingStatus =
   | 'head_of_household'
   | 'qualifying_surviving_spouse'
 
+export interface ColorStop {
+  threshold: number  // % over goal (0 = any amount over, 15 = 15% over, etc.)
+  color: string
+}
+
 export interface AttainmentDisplay {
   mode: 'standard' | 'custom'
   colorUnder: string
-  colorWarning: string
-  leniencyPct: number
-  colorOver: string
+  overStops: ColorStop[]
 }
 
 export const EXPENSE_BAR_DEFAULTS: AttainmentDisplay = {
   mode: 'standard',
-  colorUnder:   '#22C55E',
-  colorWarning: '#EAB308',
-  leniencyPct:  10,
-  colorOver:    '#EF4444',
+  colorUnder: '#22C55E',
+  overStops:  [{ threshold: 0, color: '#EAB308' }, { threshold: 10, color: '#EF4444' }],
 }
 
 export const SAVINGS_BAR_DEFAULTS: AttainmentDisplay = {
   mode: 'standard',
-  colorUnder:   '#22C55E',
-  colorWarning: '#F59E0B',
-  leniencyPct:  10,
-  colorOver:    '#10B981',
+  colorUnder: '#22C55E',
+  overStops:  [{ threshold: 0, color: '#F59E0B' }, { threshold: 10, color: '#10B981' }],
 }
 
 export interface AppSettings {

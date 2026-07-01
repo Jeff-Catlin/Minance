@@ -42,8 +42,13 @@ export default function ProgressBar({ value, target, type, height = 6, baseColor
     }
     // custom mode
     if (normalized <= 1) return cfg.colorUnder
-    if (normalized <= 1 + cfg.leniencyPct / 100) return cfg.colorWarning
-    return cfg.colorOver
+    const overPct = (normalized - 1) * 100
+    const sorted  = [...(cfg.overStops ?? [])].sort((a, b) => a.threshold - b.threshold)
+    let matched: string | null = null
+    for (const stop of sorted) {
+      if (overPct >= stop.threshold) matched = stop.color
+    }
+    return matched ?? cfg.colorUnder
   }
 
   const fillColor = getFillColor()

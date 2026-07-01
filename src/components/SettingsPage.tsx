@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useSettings, CURRENCY_SYMBOLS, EXPENSE_BAR_DEFAULTS, SAVINGS_BAR_DEFAULTS } from '../context/SettingsContext'
-import type { Currency, AppSettings, TaxFilingStatus, AttainmentDisplay } from '../context/SettingsContext'
+import type { Currency, AppSettings, TaxFilingStatus, AttainmentDisplay, ColorStop } from '../context/SettingsContext'
 import { supabase } from '../lib/supabase'
 import {
   exportCategoriesCSV, exportTransactionsCSV,
@@ -233,10 +233,33 @@ function AttainmentSection({
   description: string
   cfg: AttainmentDisplay
   defaults: AttainmentDisplay
-  labels: { under: string; warning: string; over: string }
+  labels: { under: string }
   onChange: (next: AttainmentDisplay) => void
 }) {
   const up = (partial: Partial<AttainmentDisplay>) => onChange({ ...cfg, ...partial })
+
+  const stops: ColorStop[] = [...(cfg.overStops ?? [])].sort((a, b) => a.threshold - b.threshold)
+
+  function updateStop(index: number, patch: Partial<ColorStop>) {
+    const next = stops.map((s, i) => i === index ? { ...s, ...patch } : s)
+    up({ overStops: next.sort((a, b) => a.threshold - b.threshold) })
+  }
+
+  function removeStop(index: number) {
+    if (stops.length <= 1) return
+    up({ overStops: stops.filter((_, i) => i !== index) })
+  }
+
+  function addStop() {
+    const maxThreshold = stops.length > 0 ? Math.max(...stops.map(s => s.threshold)) : 0
+    up({ overStops: [...stops, { threshold: maxThreshold + 10, color: '#EF4444' }] })
+  }
+
+  const inputStyle: React.CSSProperties = {
+    width: '58px', fontSize: '13px', padding: '4px 6px', borderRadius: '6px',
+    border: '1px solid var(--color-border)', background: 'var(--color-bg)',
+    color: 'var(--color-text)', fontFamily: 'inherit', textAlign: 'center',
+  }
 
   return (
     <div style={{ marginTop: '20px', padding: '16px', border: '1px solid var(--color-border)', borderRadius: '10px' }}>
@@ -257,37 +280,54 @@ function AttainmentSection({
 
       {cfg.mode === 'custom' && (
         <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+
+          {/* Under / on-target color */}
           <div>
-            <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--color-text-muted)' }}>{labels.under}</div>
+            <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--color-text-muted)', marginBottom: '6px' }}>{labels.under}</div>
             <ColorPicker value={cfg.colorUnder} onChange={v => up({ colorUnder: v })} />
           </div>
 
+          {/* Over-budget stops */}
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--color-text-muted)' }}>{labels.warning}</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginLeft: 'auto' }}>
-                <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>within</span>
-                <input
-                  type="number"
-                  min={1} max={99}
-                  value={cfg.leniencyPct}
-                  onChange={e => up({ leniencyPct: Math.max(1, Math.min(99, Number(e.target.value))) })}
-                  style={{ width: '54px', fontSize: '13px', padding: '3px 6px', borderRadius: '6px', border: '1px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)', fontFamily: 'inherit', textAlign: 'center' }}
-                />
-                <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>%</span>
-              </div>
+            <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--color-text-muted)', marginBottom: '8px' }}>When over</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {stops.map((stop, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 10px', background: 'var(--color-bg)', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
+                  <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', flexShrink: 0 }}>≥</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={999}
+                    value={stop.threshold}
+                    onChange={e => updateStop(i, { threshold: Math.max(0, Number(e.target.value)) })}
+                    style={inputStyle}
+                  />
+                  <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', flexShrink: 0 }}>% over</span>
+                  <div style={{ flex: 1 }}>
+                    <ColorPicker value={stop.color} onChange={v => updateStop(i, { color: v })} />
+                  </div>
+                  <button
+                    onClick={() => removeStop(i)}
+                    disabled={stops.length <= 1}
+                    title="Remove"
+                    style={{ background: 'none', border: 'none', cursor: stops.length <= 1 ? 'default' : 'pointer', color: 'var(--color-text-muted)', fontSize: '16px', padding: '0 2px', opacity: stops.length <= 1 ? 0.25 : 0.6, lineHeight: 1, flexShrink: 0 }}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
             </div>
-            <ColorPicker value={cfg.colorWarning} onChange={v => up({ colorWarning: v })} />
-          </div>
-
-          <div>
-            <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--color-text-muted)' }}>{labels.over}</div>
-            <ColorPicker value={cfg.colorOver} onChange={v => up({ colorOver: v })} />
+            <button
+              onClick={addStop}
+              style={{ ...sh.btn('export'), fontSize: '12px', marginTop: '8px' }}
+            >
+              + Add threshold
+            </button>
           </div>
 
           <button
             onClick={() => onChange(defaults)}
-            style={{ ...sh.btn('export'), fontSize: '12px', alignSelf: 'flex-start', marginTop: '2px' }}
+            style={{ ...sh.btn('export'), fontSize: '12px', alignSelf: 'flex-start' }}
           >
             Reset to defaults
           </button>
@@ -381,7 +421,7 @@ function PreferencesSection() {
           description="Color scheme for category budget progress bars"
           cfg={{ ...EXPENSE_BAR_DEFAULTS, ...settings.expenseBarDisplay }}
           defaults={EXPENSE_BAR_DEFAULTS}
-          labels={{ under: 'Under budget', warning: 'Over budget warning zone', over: 'Over threshold' }}
+          labels={{ under: 'Under / at budget' }}
           onChange={next => updateSettings({ expenseBarDisplay: next })}
         />
 
@@ -390,7 +430,7 @@ function PreferencesSection() {
           description="Color scheme for savings goal progress bars"
           cfg={{ ...SAVINGS_BAR_DEFAULTS, ...settings.savingsBarDisplay }}
           defaults={SAVINGS_BAR_DEFAULTS}
-          labels={{ under: 'In progress (under goal)', warning: 'Near goal / slightly over', over: 'Goal achieved / well over' }}
+          labels={{ under: 'In progress / at goal' }}
           onChange={next => updateSettings({ savingsBarDisplay: next })}
         />
       </div>
