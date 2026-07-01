@@ -555,13 +555,6 @@ export default function CategoryManager({ onMonthDrillDown }: { onMonthDrillDown
     return m
   }, [budgets, selectedYear])
 
-  const priorBudgetsMap = useMemo(() => {
-    const m = new Map<string, CategoryBudget>()
-    for (const b of budgets) {
-      if (b.year === selectedYear - 1) m.set(b.category_id, b)
-    }
-    return m
-  }, [budgets, selectedYear])
 
   const archivedBudgetsMap = useMemo(() => {
     const m = new Map<string, CategoryBudget>()
@@ -1273,7 +1266,6 @@ export default function CategoryManager({ onMonthDrillDown }: { onMonthDrillDown
         <SetBudgetModal
           category={budgetingCategory}
           existingBudget={budgetsMap.get(budgetingCategory.id) ?? null}
-          priorYearBudget={priorBudgetsMap.get(budgetingCategory.id) ?? null}
           year={selectedYear}
           onSave={() => { setBudgetingCategory(null); load() }}
           onClose={() => setBudgetingCategory(null)}

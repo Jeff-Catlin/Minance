@@ -151,13 +151,12 @@ function btn(active: boolean): React.CSSProperties {
 interface Props {
   category: Category
   existingBudget: CategoryBudget | null
-  priorYearBudget?: CategoryBudget | null
   year: number
   onSave: () => void
   onClose: () => void
 }
 
-export default function SetBudgetModal({ category, existingBudget, priorYearBudget, year, onSave, onClose }: Props) {
+export default function SetBudgetModal({ category, existingBudget, year, onSave, onClose }: Props) {
   const { currencySymbol } = useSettings()
   const eb = existingBudget
 
@@ -393,30 +392,6 @@ export default function SetBudgetModal({ category, existingBudget, priorYearBudg
     setMonthAmts(prev => { const n = [...prev]; n[i] = val; return n })
   }
 
-  function applyPriorYearBudget() {
-    if (!priorYearBudget) return
-    const pb = priorYearBudget
-    setMode(pb.mode)
-    setError('')
-    if (pb.mode === 'flat') {
-      setFlatAmt(pb.monthly_amount !== null ? String(pb.monthly_amount) : '')
-    } else if (pb.mode === 'variable') {
-      setMonthAmts(pb.monthly_amounts ? pb.monthly_amounts.map(v => v > 0 ? String(v) : '') : new Array(12).fill(''))
-      setRolloverSrc(pb.variable_rollover_source ?? 'actuals')
-    } else if (pb.mode === 'cadence') {
-      setCadence(pb.cadence ?? 'monthly')
-      setRefDate(pb.reference_date ?? '')
-      setLinkedRecId(pb.linked_recurring_id ?? null)
-      if (pb.monthly_amounts) {
-        setVarOccurrences(true)
-        setOccAmts(pb.monthly_amounts.map(v => v > 0 ? String(v) : ''))
-      } else {
-        setVarOccurrences(false)
-        setOccAmt(pb.amount_per_occurrence !== null ? String(pb.amount_per_occurrence) : '')
-      }
-    }
-  }
-
   return (
     <div style={overlay} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div style={modal}>
@@ -427,21 +402,6 @@ export default function SetBudgetModal({ category, existingBudget, priorYearBudg
           </p>
           <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>{year}</span>
         </div>
-
-        {/* Prior year copy prompt */}
-        {priorYearBudget && !existingBudget && (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '10px 14px', borderRadius: '8px', background: 'rgba(34,195,166,0.07)', border: '1px solid rgba(34,195,166,0.3)', marginBottom: '16px' }}>
-            <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>
-              {year - 1} budget available
-            </span>
-            <button
-              onClick={applyPriorYearBudget}
-              style={{ fontFamily: 'inherit', fontSize: '12px', fontWeight: 500, padding: '4px 12px', borderRadius: '6px', border: '1px solid var(--color-primary)', background: 'transparent', color: 'var(--color-primary-text)', cursor: 'pointer', whiteSpace: 'nowrap' }}
-            >
-              Copy from {year - 1}
-            </button>
-          </div>
-        )}
 
         {/* Mode tabs */}
         <div style={{ display: 'flex', gap: '6px', marginBottom: '20px' }}>
