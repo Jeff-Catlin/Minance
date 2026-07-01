@@ -310,10 +310,10 @@ function RenameModal({ current, onSave, onClose }: { current: string; onSave: (n
 
 const GRAPH_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 const G_PAD = 8, G_BAR = 14, G_INTRA = 3, G_INTER = 10
-const G_GROUP = G_BAR * 2 + G_INTRA + G_INTER   // 41 px per month group
-const G_W     = G_PAD * 2 + 12 * G_GROUP - G_INTER  // 498
-const G_BAR_H = 80, G_LABEL_H = 18
-const G_H     = G_BAR_H + G_LABEL_H + 4  // 102
+const G_GROUP = G_BAR * 2 + G_INTRA + G_INTER     // 41 px per month group
+const G_W     = G_PAD * 2 + 12 * G_GROUP - G_INTER // 498
+const G_BAR_H = 80, G_NEG = 24, G_LABEL_H = 18
+const G_H     = G_BAR_H + G_NEG + G_LABEL_H + 4   // 126
 
 function CategorySpendGraph({
   monthlySpend, monthlyBudget, selectedYear, currencySymbol, isLoading, onMonthClick,
@@ -341,15 +341,21 @@ function CategorySpendGraph({
     ...(monthlyBudget.filter(v => v !== null) as number[]),
     1,
   )
+  const maxNeg = Math.max(...monthlySpend.filter(v => v < 0).map(v => Math.abs(v)), 1)
 
-  function bh(val: number) { return Math.max(1, (val / maxVal) * G_BAR_H) }
+  function bh(val: number)    { return Math.max(1, (val / maxVal) * G_BAR_H) }
+  function bneg(val: number)  { return Math.min((Math.abs(val) / maxNeg) * (G_NEG - 3), G_NEG - 3) }
 
   const SPEND_CLR  = 'var(--color-expense)'
+  const CREDIT_CLR = 'var(--color-income)'
   const BUDGET_CLR = 'var(--color-primary-text)'
 
   return (
     <div style={{ marginTop: '16px', position: 'relative' }}>
       <svg width="100%" viewBox={`0 0 ${G_W} ${G_H}`} style={{ overflow: 'visible', display: 'block' }}>
+        {/* Baseline */}
+        <line x1={0} y1={G_BAR_H} x2={G_W} y2={G_BAR_H} stroke="var(--color-border)" strokeWidth={0.75} />
+
         {GRAPH_MONTHS.map((mon, m) => {
           const x      = G_PAD + m * G_GROUP
           const spend  = monthlySpend[m] ?? 0
@@ -357,13 +363,21 @@ function CategorySpendGraph({
           const isFuture = selectedYear > now.getFullYear() ||
             (selectedYear === now.getFullYear() && m > now.getMonth())
           const isHov = hovMonth === m
+          const isNeg = spend < 0
 
           return (
             <g key={m}>
-              {/* Spend bar */}
-              {spend > 0 && !isFuture && (
-                <rect x={x} y={G_BAR_H - bh(spend)} width={G_BAR} height={bh(spend)}
-                  rx={2} fill={SPEND_CLR} opacity={isHov ? 1 : 0.75} />
+              {/* Spend bar — positive goes up, negative goes down */}
+              {spend !== 0 && !isFuture && (
+                <rect
+                  x={x}
+                  y={isNeg ? G_BAR_H + 1 : G_BAR_H - bh(spend)}
+                  width={G_BAR}
+                  height={isNeg ? bneg(spend) : bh(spend)}
+                  rx={2}
+                  fill={isNeg ? CREDIT_CLR : SPEND_CLR}
+                  opacity={isHov ? 1 : 0.75}
+                />
               )}
 
               {/* Budget bar */}
@@ -376,7 +390,7 @@ function CategorySpendGraph({
 
               {/* Month label */}
               <text
-                x={x + G_BAR + G_INTRA / 2} y={G_BAR_H + G_LABEL_H - 2}
+                x={x + G_BAR + G_INTRA / 2} y={G_BAR_H + G_NEG + G_LABEL_H - 2}
                 textAnchor="middle" fontSize={9} fontFamily="inherit"
                 fill={isHov ? 'var(--color-primary-text)' : 'var(--color-text-muted)'}
                 fontWeight={isHov ? 600 : 400}
@@ -385,9 +399,9 @@ function CategorySpendGraph({
                 {mon}
               </text>
 
-              {/* Invisible hover + click target (covers bars + label) */}
+              {/* Invisible hover + click target (covers positive + negative zone) */}
               <rect
-                x={x - G_INTER / 2} y={0} width={G_GROUP} height={G_H}
+                x={x - G_INTER / 2} y={0} width={G_GROUP} height={G_BAR_H + G_NEG}
                 fill="transparent" style={{ cursor: onMonthClick ? 'pointer' : 'default' }}
                 onMouseEnter={() => setHovMonth(m)}
                 onMouseLeave={() => setHovMonth(null)}
@@ -408,7 +422,7 @@ function CategorySpendGraph({
         const leftPct = (G_PAD + m * G_GROUP + G_BAR + G_INTRA / 2) / G_W * 100
         return (
           <div style={{
-            position: 'absolute', bottom: G_LABEL_H + 10,
+            position: 'absolute', bottom: G_NEG + G_LABEL_H + 10,
             left: `${Math.min(Math.max(leftPct, 8), 92)}%`,
             transform: 'translateX(-50%)',
             background: 'var(--color-surface)', border: '1px solid var(--color-border)',
@@ -418,9 +432,11 @@ function CategorySpendGraph({
             boxShadow: '0 2px 10px rgba(0,0,0,0.15)',
           }}>
             <div style={{ fontWeight: 600, marginBottom: '4px' }}>{GRAPH_MONTHS[m]}</div>
-            {!isFuture && (
-              <div style={{ color: SPEND_CLR }}>
-                {currencySymbol}{spend.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} spent
+            {!isFuture && spend !== 0 && (
+              <div style={{ color: spend < 0 ? CREDIT_CLR : SPEND_CLR }}>
+                {spend < 0
+                  ? `${currencySymbol}${Math.abs(spend).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} credit`
+                  : `${currencySymbol}${spend.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} spent`}
               </div>
             )}
             {budget !== null ? (
